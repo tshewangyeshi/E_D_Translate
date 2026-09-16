@@ -162,12 +162,12 @@ Greenfield: no code in the repo. Reused rather than rebuilt:
 - Performance Review: 3 issues found
 - NOT in scope: written
 - What already exists: written
-- TODOS.md updates: 1 of 3 proposed; user chose to create and push the GitHub repo instead; 2 not asked (stopped at user request)
+- TODOS.md updates: 3 proposed; repo created and pushed (1), root CLAUDE.md pointer built now (2), Codex review added to TODOS.md (3)
 - Failure modes: 0 critical gaps flagged
 - Outside voice: ran (Claude subagent, 10 findings; 9 accepted, 1 rejected); Codex skipped by choice
 - Parallelization: 4 lanes, 2 parallel / 2 sequential
 - Lake Score: 30/30 recommendations chose complete option
-- Unresolved decisions: 2 (listed below)
+- Unresolved decisions: 0
 
 ## GSTACK REVIEW REPORT
 
@@ -182,6 +182,4 @@ Greenfield: no code in the repo. Reused rather than rebuilt:
 - **OUTSIDE COVERAGE:** codex, plan-review, skipped (user declined sending GovTech docs to OpenAI); native Claude subagent completed.
 - **VERDICT:** Eng review complete with all findings resolved by approved remedies; remedies not yet applied to 02/03 (T3). Not cleared for implementation until T1–T3 land. eng review required after T3.
 
-**UNRESOLVED DECISIONS:**
-- TODO 2 (root `CLAUDE.md` pointer after moving guidance into `docs/`) not asked; review stopped at user request.
-- TODO 3 (Codex outside review if GovTech policy later permits external AI services) not asked; review stopped at user request.
+NO UNRESOLVED DECISIONS
