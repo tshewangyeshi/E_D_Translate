@@ -3,7 +3,9 @@
 
 Stories are sized for one gstack sprint each: `/spec` or `/autoplan` → implement → `/review` → `/qa` where applicable → `/ship`. Each cites the requirements it satisfies. A story is done when its acceptance criteria pass **and** a test bearing the requirement ID exists.
 
-Sequence within an epic is dependency-ordered. Epics E1 and E2 are not parallelisable with anything — everything else depends on the pipeline existing.
+Sequence within an epic is dependency-ordered. Epics E1 and E2 are not parallelisable with anything — everything else depends on the pipeline existing. **E0 (Sprint 0) comes before everything:** it decides whether the placeholder approach works at all.
+
+**Revision 2026-09-16:** updated with the remedies approved in `/plan-eng-review` (`docs/designs/dzweb-eng-review.md`), cited as `[ER-n]` / `[ER-On]`. Requirements introduced by the review are **UNNUMBERED** until S0.3 lands the numbered SRS. **Pilot scope:** one citizen services portal through the widget. Audio (E5), proxy and CMS (E8) and the crawler (S9.2) are post-pilot.
 
 ---
 
@@ -15,100 +17,155 @@ Sequence within an epic is dependency-ordered. Epics E1 and E2 are not paralleli
 4. `/review` run, findings resolved or explicitly deferred with a reason in the PR body.
 5. `/cso` run if the story touches the proxy, the API surface, or anything handling remote content.
 6. Docs updated (`/document-release` runs automatically on `/ship`).
-7. No new requirement introduced without an SRS amendment. If a story reveals a missing requirement, amend `01-srs.md` in the same PR.
+7. No new requirement introduced without an SRS amendment. If a story reveals a missing requirement, amend **`docs/00-requirements.md`** (the numbered SRS, S0.3) in the same PR. A CI check rejects tests or PR bodies citing an ID not defined there [ER-O8].
+
+---
+
+## E0 — Sprint 0: go/no-go
+
+Nothing in E1 depends on a guess. This epic measures the real NMT endpoint and lands the numbered requirements before any pipeline code is written [ER-O1, ER-O7, ER-O8].
+
+### S0.1 — Placeholder survival go/no-go
+**As** the team, **I need** to know which placeholder format survives the real NLLB deployment, **so that** restoration isn't built on a token format that `<unk>`s or gets dropped.
+Requirements: FR-120, FR-122, FR-140, FR-141 · UNNUMBERED [ER-O1]
+- [ ] Ask the NMT operator whether custom tokens exist in the deployed tokenizer; record the answer
+- [ ] ~20 public pilot-portal page snapshots committed to `tests/fixtures/gov-pages/` (personal data replaced with `synthetic-entities.json` values)
+- [ ] Each masked block sent to WSO2 **once** per candidate format (at least 3, e.g. `⟦N⟧`, `<x1/>`-style, spelled sentinels); raw responses recorded to `tests/fixtures/mt-replay/`, keyed by source hash + model version + format
+- [ ] Report: survival rate per format; block fallback rate by cause (entity lost / altered / duplicated / invented, tag lost / duplicated / reordered, text in non-existent run, glossary term missing, leak scan hit, upstream error) and by block type (heading, paragraph, paragraph-with-link, table cell, form label, list item)
+- [ ] **Gate before S1.5:** masker recall 100% on a held-out set of pages; leak scan 0; block fallback ≤ agreed threshold (proposed 20%). Decision recorded in the repo
+- [ ] S1.4 mock modes and rates are calibrated from these recordings
+*gstack:* `/spec` → run → decision recorded; `/codex` second opinion if GovTech policy allows (see `TODOS.md`)
+
+### S0.2 — WSO2 capacity measurement
+Requirements: NFR-100, NFR-412 · UNNUMBERED [ER-O7]
+- [ ] Measured and documented: requests per second, maximum batch size, maximum input length, p95 latency, behaviour at the limit (429 vs queueing)
+- [ ] Capacity note in the spec: pilot pages × segments per page vs quota, including the offline pre-warm time
+- [ ] Token-bucket sizes for the quota manager (§2.10) derived from these numbers
+
+### S0.3 — Numbered requirements in the repo
+Requirements: all · [ER-O8]
+- [ ] The numbered SRS defining FR-100..FR-631 and NFR-100..NFR-500 is committed as `docs/00-requirements.md`; `01-srs.md` is clarified as repo guidance
+- [ ] Every UNNUMBERED item in `02-technical-spec.md` and this backlog is assigned an ID by the SRS owner, or explicitly dropped
+- [ ] CI check: any `test_fr…`/`test_nfr…` name or `FR-`/`NFR-` citation in a PR body must exist in `docs/00-requirements.md`
+*Blocks sprint 1.*
 
 ---
 
 ## E1 — Pipeline foundations
 
-The engine. Nothing else can start.
+The engine. Nothing else can start except E0. **Sprint 1 builds what the widget pilot uses:** the browser extractor and the server's segment grammar. The Python DOM extractor moves to E8 (S8.0b) [ER-O6].
 
-### S1.1 — Node extraction
-**As** the orchestrator, **I need** to identify which text on a page may be translated, **so that** code, scripts and opted-out content are never sent to the model.
-Requirements: FR-110, FR-111, FR-112, FR-113
+### S1.1 — Widget block extraction and encoding
+**As** the widget, **I need** to identify which text on a page may be translated and encode each block with its placeholders, **so that** code, scripts and opted-out content are never sent, and every translation can be written back into the same text nodes.
+Requirements: FR-110, FR-111, FR-112, FR-113, FR-120, FR-121 · [ER-2, ER-O6, ER-18]
+- [ ] `adapters/widget/extract.ts` runs under jsdom in vitest
 - [ ] Text inside `script`, `style`, `code`, `pre`, `kbd`, `samp`, `var`, `textarea` is excluded
-- [ ] `translate="no"`, `class="notranslate"`, `data-no-translate` exclude the element and all descendants
+- [ ] `translate="no"`, `class="notranslate"`, `data-no-translate`, `data-dz-skip` and configured `private_selectors` exclude the element and all descendants [ER-O3]
 - [ ] Elements with `lang` starting `dz` are excluded
-- [ ] `alt`, `title`, `placeholder`, `aria-label`, and submit/button `value` are extracted as attribute units
+- [ ] `alt`, `title`, `placeholder` and submit/button `value` are extracted as attribute units; **`aria-label` and `aria-description` are not** [ER-18]
 - [ ] Whitespace-only and punctuation-only nodes produce no unit
+- [ ] A paragraph with inline links and emphasis yields one segment plus an ordered list of its text nodes (runs); void elements become `⟦vN/⟧` markers with no run; nested blocks: innermost wins, and outer text on each side becomes separate segments [ER-2]
+- [ ] Literal `⟦`/`⟧` in source are escaped
 - [ ] Extraction is order-stable: the same document yields the same unit sequence every time
+- [ ] **Shared golden fixtures** `tests/fixtures/extraction/*.json` (HTML → expected segments and runs) pass here and in pytest (S1.2, S8.0b)
 *gstack:* `/spec` → implement → `/review`
 
-### S1.2 — Block grouping and placeholders
-**As** the orchestrator, **I need** to translate whole blocks rather than fragments, **so that** word-order differences between English and Dzongkha do not shred sentences.
-Requirements: FR-120, FR-121, FR-124
-- [ ] A paragraph containing inline links and emphasis yields exactly one segment
-- [ ] Inline markup is represented by numbered placeholder pairs with a side map preserving tag and attributes
-- [ ] Nested inlines collapse to the outermost pair under default strictness
-- [ ] Round-trip without translation (identity model) reproduces the original markup byte-for-byte
+### S1.2 — Server segment grammar
+**As** the orchestrator, **I need** to parse and validate placeholder segments from any adapter, **so that** malformed or hostile input never reaches the model.
+Requirements: FR-120, FR-121, FR-124 · [ER-2, ER-10]
+- [ ] Parses wire markers `⟦N⟧…⟦/N⟧`, `⟦vN/⟧`; rejects unescaped delimiters, unbalanced or unknown markers → `tag_fallback` with source text
+- [ ] Round-trip without translation (identity model) reproduces the segment byte-for-byte
 - [ ] Segments over the model limit split at shad or terminal punctuation, never inside a placeholder
+- [ ] Converts wire markers ↔ the model token format chosen in S0.1
+- [ ] Passes the shared extraction fixtures
 *gstack:* `/spec` → implement → `/review`
 
 ### S1.3 — Entity masking
 **As** a citizen, **I need** dates and amounts in a notice to be exactly right, **so that** I do not miss a deadline or misread an amount.
-Requirements: FR-140, FR-141 · Gate: NFR-201
-- [ ] URLs, emails, 11-digit IDs, reference numbers, Ngultrum amounts, dates, percentages and numbers are masked before the model
+Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
+- [ ] URLs, emails, 11-digit IDs, reference numbers, currency amounts (`Nu.`, `BTN`, `Ngultrum`), ISO/numeric/**word-month** dates, percentages and numbers are masked before the model
+- [ ] **Catch-all numeric pattern:** no digit run of any length reaches the model unmasked (`1500`, `2026`, `17123456` are regression cases)
 - [ ] Currency patterns match before bare numbers
-- [ ] All masks restore exactly; output entities are byte-identical to input
-- [ ] A model response missing any mask token causes the segment to fall back to source text with `entity_check_failed`
-- [ ] The adversarial mock (a model that randomly drops, duplicates and mangles tokens) cannot produce an altered entity in output — 10,000 randomised runs
-*gstack:* `/spec` → implement → `/review` → `/codex` (second opinion — this is the highest-consequence module)
+- [ ] **Exact multiset:** each entity token appears exactly once in output; duplicated, invented, truncated or missing tokens → `entity_check_failed` with source text
+- [ ] **Leak scan:** any ASCII or Tibetan digit (U+0F20–0F29), email or URL outside restored entities and glossary terms → `entity_check_failed`
+- [ ] All masks restore exactly from **the current request's** entity map; output entities are byte-identical to input
+- [ ] Hypothesis property test: random digit strings, dates and amounts in random contexts round-trip byte-identical under every mock mode
+- [ ] Masker recall measured against hand-labelled snapshots, with a held-out set
+- [ ] The adversarial mock (drops, duplicates, invents, truncates and mangles tokens) cannot produce an altered entity in output — 10,000 randomised runs
+*gstack:* `/spec` → implement → `/review` → `/codex` (second opinion if policy allows — this is the highest-consequence module)
 
 ### S1.4 — Adversarial model mock
 **As** a developer, **I need** a model mock that misbehaves on purpose, **so that** restoration and validation are tested against realistic failure rather than a cooperative stub.
 Requirements: supports FR-122, FR-123, FR-141
-- [ ] Mock modes: well-behaved, drops placeholders, duplicates placeholders, reorders placeholders, mangles mask tokens, returns empty, times out, returns 503
+- [ ] Mock modes: well-behaved, drops placeholders, duplicates placeholders, reorders placeholders, **invents placeholders, truncates tokens, converts digits to Tibetan, invents numbers**, mangles mask tokens, returns empty, times out, returns 503
+- [ ] Mode mix and rates calibrated from S0.1 recordings
 - [ ] Deterministic under a seed
 - [ ] Used by default in unit tests; real endpoint only in integration tests
 *Build this before S1.5.*
 
 ### S1.5 — Restoration and tag validation
-Requirements: FR-122, FR-123 · Gate: NFR-200
-- [ ] Placeholder multiset in output is compared to input; mismatch records a tag-integrity failure
-- [ ] On mismatch, formatting collapse produces valid markup with the segment's formatting applied to the whole
+Requirements: FR-122, FR-123 · Gate: NFR-200 · [ER-2, ER-10]
+- [ ] Placeholder multiset **and order** in output are compared to input by the same shared validator as entities; mismatch records a tag-integrity failure
+- [ ] **Widget responses:** on mismatch the segment returns `tag_fallback` with source text, and the widget keeps the block English (no DOM restructuring, FR-210)
+- [ ] **Proxy/CMS/html responses:** formatting collapse produces valid markup with the segment's formatting applied to the whole
 - [ ] Malformed markup is never emitted, under any mock mode
 - [ ] Tag integrity rate is computed and exposed per batch
-*gstack:* `/spec` → implement → `/review` → `/codex`
+*Blocked by the S0.1 gate.* *gstack:* `/spec` → implement → `/review` → `/codex` (if policy allows)
 
 ### S1.6 — Glossary substitution
-Requirements: FR-400, FR-401, FR-402
+Requirements: FR-400, FR-401, FR-402 · [ER-7]
 - [ ] Longest-match-first substitution from a versioned termbase
 - [ ] Case-sensitive matching per entry flag
 - [ ] The English term never reaches the model; the approved Dzongkha string always appears in output
+- [ ] Each term carries `term_id` + `term_version`; each segment computes its glossary fingerprint `gfp` from matched terms
 - [ ] Glossary compliance rate reported per batch
 - [ ] Termbase loads from a versioned file; version is exposed in API responses
 
 ### S1.7 — Cache and translation memory
-Requirements: FR-150, FR-151, FR-410, FR-411
-- [ ] Cache key includes normalised text, language pair, model version, glossary version, segmentation version
-- [ ] Lookup order is approved → cached → live
-- [ ] Publishing a new termbase version causes affected entries to miss
-- [ ] Every translated segment persists with source, MT output, versions and tag integrity flag
-- [ ] Redis unavailable degrades to TM/live without error
+Requirements: FR-150, FR-151, FR-410, FR-411, FR-510 · [ER-1, ER-12, ER-13, ER-14, ER-21, ER-O3]
+- [ ] Keys are computed from the **masked** normalised segment, language pair, derived `pipeline_version`, `gfp`, and (machine keys only) model version
+- [ ] Redis values and TM rows contain **masked text only**; test: "Pay Nu. 500" and "Pay Nu. 600" share one entry and each restores its own amount; whitespace/NFC variants keep their own bytes
+- [ ] **Tier gate before lookup:** Tier 1 reads only approved (`origin = human`) translations; `test_fr510_tier1_never_served_cached_mt` fills the cache from a Tier 2 request and asserts Tier 1 gets `tier_blocked`
+- [ ] Lookup order for Tier 2+: approved → machine → live within budget → `pending_mt` + enqueue
+- [ ] `pipeline_version` is derived from pattern data, segmentation rules and the golden fixtures' masked output; changing a pattern changes it, and a pure refactor does not
+- [ ] Data model: `segment` / immutable `translation_version` / mutable `review_item`; approving creates a new version row and never overwrites; no tier column on content
+- [ ] Publishing a term change invalidates **exactly** the segments containing that term (via `term_id → keys` index); machine rows re-warm rate-capped; approved rows → `needs_recheck`, not served
+- [ ] A `pipeline_version` change migrates approved rows: unchanged output → re-key; changed → `needs_recheck`
+- [ ] One batched TM query per request
+- [ ] Redis unavailable degrades to TM/live without error; no enqueue for keys already translated
+- [ ] Tier 2 segments are not persisted until seen from N distinct clients; unapproved machine rows expire after the retention period [ER-O3]
 
 ---
 
 ## E2 — API surface
 
 ### S2.1 — `/v1/translate`
-Requirements: FR-100, NFR-100, NFR-412
+Requirements: FR-100, NFR-100, NFR-412 · [ER-3, ER-O4, ER-O5, ER-O7, ER-O9, ER-21]
 - [ ] Batches up to 64 segments; 413 beyond
-- [ ] Per-segment status, never all-or-nothing
-- [ ] Upstream failure returns 200 with source text and `upstream_error`
+- [ ] Per-segment status, never all-or-nothing; each segment returns `segment_key` and, when translated, `origin`
+- [ ] Upstream failure returns 200 with source text and `upstream_error`; PostgreSQL or Redis failure is also never a 5xx
+- [ ] Live MT only within the per-request budget (proposed 1.5 s) and only with quota-manager tokens; the rest return `pending_mt` + enqueue
 - [ ] p95 under 300 ms on a fully cached batch of 64, measured locally
-- [ ] Under load beyond capacity, uncached requests are shed rather than queued
-
-### S2.2 — `/v1/translate/html`
-Requirements: FR-101, FR-114
-- [ ] Round-trips a real government page fixture with structure unchanged
-- [ ] Translates title and meta description
-- [ ] Returns per-document stats
+- [ ] Under load beyond capacity, uncached work is **enqueued** (bounded depth), not dropped
+- [ ] HTTP caching: body-hash `ETag`; `Cache-Control: no-store` when any segment is `pending_mt`; test proves a pending response is never 304'd after its job completes
+- [ ] Keyless public route with enrolled-origin allowlist and per-origin + per-IP rate limits (429)
 
 ### S2.3 — Health, metrics, gateway publication
-Requirements: FR-600, FR-610, FR-611
-- [ ] Health reports each upstream independently
-- [ ] Metrics: cache hit rate, tag integrity, entity preservation, glossary compliance, latency, upstream errors
-- [ ] Published through WSO2 with per-consumer keys and quotas
+Requirements: FR-600, FR-610, FR-611 · [ER-O4]
+- [ ] Health reports each upstream independently (NMT, PostgreSQL, Redis, queue depth, quota)
+- [ ] Metrics: cache hit rate, tag integrity, entity preservation, glossary compliance, latency, upstream errors, fallback rate by cause, `pending_mt` rate, queue depth and age
+- [ ] **Public widget routes** (`/translate`, `/config`, `/feedback`) published keyless (WSO2 passthrough if FR-600 requires); **server-to-server routes** use WSO2 per-consumer keys and quotas
+- [ ] FR-600 wording confirmed with GovTech
+
+### S2.4 — Job queue, worker and quota manager
+Requirements: NFR-412 · UNNUMBERED [ER-3, ER-O7, ER-21]
+- [ ] PostgreSQL job table, claimed with `FOR UPDATE SKIP LOCKED` in short transactions; partial index on pending jobs
+- [ ] Unique on `machine_key` for **active** jobs only; invalidated keys can be enqueued again
+- [ ] Visibility-timeout sweeper returns a crashed worker's jobs to pending (fault test)
+- [ ] Enqueue skipped when a current translation already exists
+- [ ] Token-bucket quota manager sized from S0.2 reserves ≥50% of upstream capacity for the worker; live attempts use leftover tokens only
+- [ ] Offline pre-warm CLI translates every enrolled pilot page from snapshots through the worker before launch
+- [ ] Rate-capped re-warm for glossary and model invalidations
 
 ---
 
@@ -117,61 +174,93 @@ Requirements: FR-600, FR-610, FR-611
 Deliberately early. Retrofitting tiering after adoption means renegotiating with every agency.
 
 ### S3.1 — Content tiering
-Requirements: FR-500, FR-510, FR-511
-- [ ] Tier travels with the request and with the enrolled site's defaults
-- [ ] Absent or unparseable tier defaults to tier 1 (most restrictive)
-- [ ] Tier 1 live MT returns `tier_blocked` and the source text — verified by test, not by policy
+Requirements: FR-500, FR-510, FR-511 · [ER-1, ER-6]
+- [ ] **The server resolves the tier:** the strictest of the site default, site path rules, matched site selectors and the request's tier hint. A request can make content stricter, never looser
+- [ ] Absent or unparseable tier, or an unknown site, resolves to Tier 1 (most restrictive)
+- [ ] The tier gate runs **before any cache or TM lookup**; Tier 1 without an approved translation returns `tier_blocked` and the source text — verified by test, not by policy
+- [ ] Test: a request claiming Tier 2 for a path or selector the site marks Tier 1 → `tier_blocked`
+- [ ] `GET /v1/config` returns Tier 1 selectors and private selectors per enrolled site; path and selector rules are audited (S3.3)
+- [ ] Review-item creation capped per site per day
 - [ ] Tier 2 forces glossary and flags for review
 
 ### S3.2 — Machine-translation labelling
-Requirements: FR-520, FR-521, FR-522
+Requirements: FR-520, FR-521, FR-522 · [ER-O9]
 - [ ] Persistent bilingual notice on any page carrying machine output
 - [ ] Notice is not dismissable in a way that persists across pages
 - [ ] `lang="dz-x-mtfrom-en"` on machine output, `lang="dz"` on approved output
-- [ ] Notice carries a working report-an-error affordance
+- [ ] Notice carries a working report-an-error affordance, backed by S3.5
 *gstack:* `/plan-design-review` before implementing — this is user-facing and easy to make ugly or ignorable.
 
 ### S3.3 — Audit trail
 Requirements: FR-620
-- [ ] Termbase changes, review approvals and tier changes record actor, action, subject, timestamp
+- [ ] Termbase changes, review approvals, offline seed imports, tier rule changes and site enrolment changes record actor, action, subject, timestamp
 - [ ] Audit records are append-only
+
+### S3.4 — Personal-data controls
+Requirements: UNNUMBERED · NFR-303 · [ER-O3]
+- [ ] Pilot enrols public, unauthenticated pages only
+- [ ] Widget loads nothing on pages marked `data-dz-private`; `data-dz-skip` and configured `private_selectors` regions are never extracted
+- [ ] Server normalises numeric and ID-like path segments to `:id` before storage
+- [ ] Tier 2 segments are neither persisted nor sent to MT until seen from ≥N distinct clients (proposed 3; salted, daily-rotated client hash); test: a one-off string never reaches the WSO2 mock
+- [ ] Unapproved machine translations expire after the retention period (proposed 90 days)
+- [ ] Logs contain `segment_key` hashes only, never segment text
+*gstack:* `/cso` is a gate on this story.
+
+### S3.5 — Minimal error-report intake
+Requirements: FR-430, NFR-303 · [ER-O9, ER-18]
+- [ ] `/v1/feedback` stores reports against `segment_key` (returned by `/v1/translate`)
+- [ ] Rate limits: 10 reports/hour per client hash, 100/day per segment; honeypot field; limited or honeypot requests get 202 and are silently dropped (tested)
+- [ ] No reporter identifier stored
+- [ ] Triage and approval workflow stays in E7 (S7.2)
 
 ---
 
 ## E4 — Widget
 
 ### S4.1 — Core widget
-Requirements: FR-200, FR-201, FR-210, FR-214, FR-215, NFR-502
+Requirements: FR-200, FR-201, FR-210, FR-214, FR-215, NFR-502 · [ER-2, ER-6, ER-8, ER-16, ER-18, ER-O10]
 - [ ] Single script tag, no host build step
-- [ ] Under 15 KB gzipped, enforced in CI
-- [ ] Text nodes mutated in place — a React fixture app re-renders after translation without error
+- [ ] Widget build: `tsc` (no downlevel helpers, CI grep) → pinned minifier (no bundling) → content hash + SRI; no bundler, framework or polyfills
+- [ ] Under 15 KB gzipped, measured on the final hashed file, enforced in CI
+- [ ] Fetches `/v1/config` first; on failure offers no toggle and the page stays English
+- [ ] Writes each translated run into its own existing text node; run count or order mismatch → block stays English; node identity (same `Text` objects, count, order) asserted in vitest
+- [ ] Stale-response guard: a response is applied only if Dzongkha is still on, the block generation matches, and node values still equal the text that was sent
+- [ ] `pending_mt` segments re-requested once after ~8 s
+- [ ] Dzongkha-specific logic only in `locale-dz.ts`; CI grep (literal + escape forms) passes
+- [ ] Auto-translate from a saved preference waits for `load` + idle + two quiet frames
+- [ ] **Playwright fixtures: React CSR, React SSR (`hydrateRoot`), Vue CSR, Vue SSR** — translate, host re-render and toggle produce no framework errors or hydration warnings in the console
 - [ ] API failure leaves the page in English with no uncaught exception
-- [ ] Works in Android WebView versions in common use in Bhutan
-*gstack:* `/spec` → implement → `/review` → `/qa` against a fixture host page
+- [ ] **Device matrix:** Android System WebView / Chrome ~90, ~100 and current, with floors confirmed from pilot analytics; run before each release
+*gstack:* `/spec` → implement → `/review` → `/qa` against the fixture host pages
 
 ### S4.2 — Dynamic content and attributes
-Requirements: FR-113, FR-211
-- [ ] Content injected after load is translated
-- [ ] The observer does not re-trigger on the widget's own mutations
-- [ ] Debounced; an SPA route change produces one batch, not hundreds
-- [ ] Attributes translated on both initial and subsequent passes
+Requirements: FR-113, FR-211 · [ER-11, ER-18, ER-20]
+- [ ] Observer watches `childList` **and `characterData`**; content injected after load is translated
+- [ ] A host change to translated text (value ≠ last written) updates the original and re-extracts the block; the widget's own writes are ignored by comparing against last-written values (no re-entrancy flag)
+- [ ] Debounced dirty-set extraction of only affected blocks; an SPA route change produces one batch, not hundreds
+- [ ] Initial pass in viewport order with main-thread yielding; off-screen blocks deferred via `IntersectionObserver`
+- [ ] Performance test (Playwright, CPU throttled 6×, 3,000-node page with a 250 ms ticking counter): no widget long task > 50 ms; input latency p95 < 100 ms
+- [ ] `alt`, `title`, `placeholder` translated on initial and subsequent passes and restored exactly; `aria-label`/`aria-description` never touched
 
 ### S4.3 — Toggle and persistence
-Requirements: FR-212, FR-213
+Requirements: FR-212, FR-213 · [ER-11, ER-19]
 - [ ] Toggle restores original text exactly, including whitespace
+- [ ] **Regression:** host changes a fee from Nu. 500 to Nu. 600 while Dzongkha is on; toggle back shows Nu. 600
 - [ ] Choice persists across pages on the same origin
-- [ ] Repeated toggling does not accumulate state or leak memory
+- [ ] Repeated toggling does not accumulate state or leak memory: state lives in `WeakMap`s; vitest mounts/unmounts 1,000 blocks × 50 cycles and in-flight state returns to zero; Playwright heap snapshot shows no detached `Text` retained after 50 SPA route changes
 
 ### S4.4 — Host-page safety
-Requirements: FR-210, NFR-300, NFR-401
-- [ ] Translated text is inserted as text, never parsed as HTML
+Requirements: FR-210, NFR-300, NFR-401 · [ER-18]
+- [ ] Translated text is inserted as text (`nodeValue` / `setAttribute`), never parsed as HTML
 - [ ] A fixture page with a script-bearing translation response is not executed
-- [ ] Automated accessibility score of the host page is unchanged with the widget present
+- [ ] axe-core via Playwright on the four fixture hosts: **zero new violations** vs. the widget-absent baseline
 *gstack:* `/cso` on this story specifically.
 
 ---
 
 ## E5 — Speech and player
+
+**Post-pilot [ER-4].** Read-aloud is built after the translation pilot. FR-330 storage guards (no placeholders, mask tokens or zero-width characters in stored text) are enforced from E1/E6 onward, so this epic needs no rework of the pipeline. S5.2 still needs a DCDD reviewer, and spec open question 1 (TTS timing marks) must be answered first.
 
 ### S5.1 — TTS service integration
 Requirements: FR-300, FR-301, FR-302, FR-330
@@ -213,12 +302,15 @@ Requirements: FR-340, FR-341
 - [ ] Self-hosted subsetted WOFF2 with `font-display: swap` and a documented fallback
 - [ ] Type scale exposed as CSS custom properties
 - [ ] Four-character stacked syllables render unclipped at default settings
-- [ ] **Blocked until the DDC Uchen web-embedding licence is confirmed**
+- [ ] **Ships an OFL-licensed Tibetan fallback font (e.g. Noto Serif Tibetan, licence confirmed by GovTech) as the default** [ER-O9]
+- [ ] DDC Uchen replaces the fallback once its web-embedding licence is confirmed (no longer a blocker for the pilot)
+- [ ] Translated blocks size from the block's original font size (`--dz-base`), so nested translated blocks don't compound 1.3 × 1.3; handled-but-untranslated blocks reset to host typography
 
 ### S6.2 — Line-breaking
-Requirements: FR-160
+Requirements: FR-160, NFR-500 · [ER-8]
 - [ ] Long Dzongkha strings wrap within their container rather than overflowing
 - [ ] Break assistance is applied at render only; cache, TM and TTS input contain no inserted characters — verified by asserting on stored values
+- [ ] Widget rule lives in `adapters/widget/locale-dz.ts`, server rule in `locale/dz.py`; a shared JSON fixture proves both insert breaks at the same positions
 
 ### S6.3 — Rendering conformance suite
 Requirements: verifies FR-340, FR-341, FR-160
@@ -231,6 +323,17 @@ Requirements: verifies FR-340, FR-341, FR-160
 
 ## E7 — Review workflow
 
+S7.0 is **pre-pilot**; the rest of E7 is post-pilot.
+
+### S7.0 — Offline Tier 1 seed (pre-pilot)
+**As** a citizen on the pilot portal, **I need** the fee and eligibility text in Dzongkha, **so that** the pilot proves the value on the pages that matter most, even before the reviewer UI exists.
+Requirements: FR-410, FR-411, FR-510, FR-620 · UNNUMBERED [ER-O2]
+- [ ] Named DCDD reviewers and a review timeline are agreed (dependency for sprint 4)
+- [ ] `ops/seed.py export` extracts every Tier 1 segment from the pilot snapshots to XLIFF/spreadsheet, with entity and tag placeholders **locked** (visible, not editable)
+- [ ] Reviewers translate and approve offline
+- [ ] `ops/seed.py import` validates each row's placeholder multiset and order and rejects invalid rows with a reason; valid rows become `translation_version` (`origin = human`) + `review_item = approved`, each with an audit event
+- [ ] Before launch, a report lists Tier 1 coverage per pilot page (approved / still English)
+
 ### S7.1 — Reviewer interface
 Requirements: FR-420, FR-421
 - [ ] Segments pending review, filterable by site and tier
@@ -238,17 +341,19 @@ Requirements: FR-420, FR-421
 - [ ] An approved segment supersedes machine output everywhere it appears
 *gstack:* `/plan-devex-review` — DCDD translators are the users and they are not developers.
 
-### S7.2 — Public error reporting
-Requirements: FR-430, FR-431
-- [ ] Reports queue against a segment key
-- [ ] No reporter identifier is stored (NFR-303)
+- [ ] Approving creates a new immutable `translation_version`; `needs_recheck` items show the previous approved text and the glossary or masker change that triggered the recheck [ER-14, ER-7]
+- [ ] Editor refuses to save if entity placeholders are missing, duplicated or altered, or tag placeholders are out of order
+
+### S7.2 — Public error reporting (triage)
+Requirements: FR-430, FR-431 · [ER-O9, ER-18]
+- [ ] Builds on the S3.5 intake (reports already queue against `segment_key`, rate-limited, honeypot, no reporter identifier)
+- [ ] Reviewers triage reports in the reviewer interface
 - [ ] Accepted reports become approved TM entries
-- [ ] Rate limited and spam resistant
 
 ### S7.3 — Termbase management
-Requirements: FR-403
+Requirements: FR-403 · [ER-7]
 - [ ] DCDD can add, amend, retire and publish entries
-- [ ] Publication produces a new version and invalidates affected cache entries
+- [ ] Publication bumps `term_version` for changed terms and invalidates **only** segments containing them; machine rows re-warm rate-capped, approved rows → `needs_recheck`
 - [ ] Changes are audited
 
 ---
@@ -257,13 +362,32 @@ Requirements: FR-403
 
 Last, deliberately. It is the highest-risk component and the lowest-urgency one.
 
+### S8.0 — Shared hardened fetcher
+Requirements: NFR-301, NFR-302, FR-223 · [ER-5]
+- [ ] `ops/fetch.py` is the **only** module that fetches remote page content (CI check); used by the proxy and the crawler (S9.2)
+- [ ] Resolves the enrolled site record; refuses redirects to non-allowlisted hosts
+- [ ] Refuses literal IPs and internal, loopback, link-local and metadata ranges; **checks the IP after DNS resolution and again on the connected socket** (DNS-rebinding fault test)
+- [ ] GET/HEAD only; cookies and auth headers stripped both ways; response size and time caps
+*gstack:* `/cso` is a gate on this story.
+
+### S8.0b — Server-side DOM extraction
+Requirements: FR-110, FR-111, FR-112, FR-113, FR-114 · [ER-O6]
+- [ ] Python `extract.py` passes the shared extraction fixtures from S1.1
+- [ ] Adds `<title>` and meta/OG description units (FR-114)
+
+### S8.0c — `/v1/translate/html` (moved from E2)
+Requirements: FR-101, FR-114 · [ER-5, ER-O6]
+- [ ] Round-trips a real government page fixture with structure unchanged
+- [ ] Translates title and meta description
+- [ ] Returns per-document stats
+- [ ] `url` is metadata only; the server never fetches it (test)
+- [ ] Server-to-server route with WSO2 consumer keys
+
 ### S8.1 — Proxy core
 Requirements: FR-220, FR-221
 ### S8.2 — Proxy security
 Requirements: FR-222, FR-223, NFR-301, NFR-302
-- [ ] Allowlist resolves to enrolled site records, not pattern matching on request input
-- [ ] Redirects to non-allowlisted hosts refused; internal ranges and literal IPs refused
-- [ ] Only GET and HEAD; cookies and auth headers stripped both ways
+- [ ] All fetching goes through S8.0 (allowlist resolution, redirect and IP rules, GET/HEAD only, header stripping)
 - [ ] Apparent authenticated sessions abort with an explanation
 - [ ] Cache keys derive only from validated fields
 *gstack:* `/cso` is a gate on this story, not an afterthought. Do not expose the proxy publicly until its findings are closed.
@@ -276,10 +400,13 @@ Requirements: FR-224
 
 ### S9.1 — Site enrolment
 Requirements: FR-601
-### S9.2 — Warm-cache crawler
-Requirements: FR-152, FR-303, NFR-102
-- [ ] Scheduled crawl pre-translates and pre-synthesises enrolled sites
-- [ ] Crawler load is bounded and cannot starve live traffic
+### S9.2 — Warm-cache crawler (post-pilot)
+Requirements: FR-152, FR-303, NFR-102 · [ER-5, ER-O7]
+- [ ] Fetches only through S8.0; `/cso` gates this story
+- [ ] Scheduled crawl pre-translates (and, after E5, pre-synthesises) enrolled sites through the S2.4 queue
+- [ ] Crawler load is bounded by the quota manager and cannot starve live traffic or the worker's reserved share
+- [ ] Crawled content goes through the same S3.4 personal-data controls
+*The pilot is pre-warmed offline from snapshots instead (S2.4).*
 ### S9.3 — Operations dashboard
 Requirements: FR-612
 
@@ -295,10 +422,18 @@ Requirements: NFR-202
 - [ ] Held in a separate repository or a protected path; never used for tuning
 - [ ] chrF++ scored on every model or glossary change
 ### S10.2 — Release gates in CI
-Requirements: NFR-200, NFR-201
-- [ ] Tag integrity below 99% fails the build
-- [ ] Entity preservation below 100% fails the build
-- [ ] Both run against the adversarial mock and against the real endpoint nightly
+Requirements: NFR-200, NFR-201 · [ER-15]
+The adversarial mock breaks tags at a configured rate, so a *rate* measured against it describes the mock, not dzweb. Gates are split by what each can prove:
+- [ ] **Every build (mock):** across all mock modes and 10,000 seeded runs — zero malformed markup emitted, zero altered or duplicated entities, zero partial restores. Tests named `test_nfr200_*` / `test_nfr201_*`
+- [ ] **Every build (replay):** the recorded real responses from S0.1 pass with tag integrity ≥ 99% and entity preservation 100%
+- [ ] **Nightly (real endpoint):** on the frozen evaluation set (S10.1), tag integrity below 99% or entity preservation below 100% fails; the trend is reported
+
+### S10.4 — Fault-injection suite
+Requirements: NFR-410, NFR-412, FR-510, NFR-301 · [ER-17]
+- [ ] `tests/fault/` runs in `make check` against real PostgreSQL and Redis (containers) and a controllable WSO2 mock
+- [ ] Cases: Redis down; PostgreSQL down (tier gate fails closed to source text, still 200); WSO2 slow / 503 / garbage; worker killed mid-job → reclaimed after visibility timeout; invalidated key re-enqueues; stampede → live attempts shed to a bounded queue; quota exhausted → live skipped, worker proceeds; fetcher refuses a redirect to 169.254.169.254 and a DNS answer that changes to 10.x between resolve and connect
+- [ ] Each case asserts HTTP 200, source text where applicable, and an emitted metric
+- [ ] Redis-down case: p95 < 800 ms on a 64-segment cached batch (batched TM read + LRU) [ER-21]
 ### S10.3 — Performance benchmarks
 Requirements: NFR-100, NFR-101, NFR-103, NFR-104
 *gstack:* `/benchmark` before and after each release.
@@ -307,16 +442,19 @@ Requirements: NFR-100, NFR-101, NFR-103, NFR-104
 
 ## Suggested sprint order
 
+*Re-sequenced by `/plan-eng-review` 2026-09-16 [ER-4, ER-O1, ER-O2, ER-O6, ER-O7, ER-O9].*
+
 | Sprint | Stories | Milestone |
 |---|---|---|
-| 1 | S1.1, S1.2, S1.4 | Extraction and segmentation round-trip cleanly |
-| 2 | S1.3, S1.5, S10.2 | The two gates exist and pass |
-| 3 | S1.6, S1.7, S2.1 | API serving cached, glossary-enforced translations |
-| 4 | S3.1, S3.2, S3.3, S2.3 | Governance enforced before first external use |
-| 5 | S4.1, S4.2, S4.4 | Widget translating a real pilot page |
-| 6 | S6.1, S6.2, S6.3 | It looks right on real devices |
-| 7 | S5.1, S5.2, S5.3 | Audio works end to end |
-| 8 | S4.3, S5.4, S9.2, S10.1 | Pilot-ready; usability testing begins |
-| 9+ | E7, E9, E8 | Review workflow, operations, then proxy |
+| 0 | S0.1, S0.2, S0.3 | **Go/no-go:** placeholder format proven on the real endpoint, capacity measured, numbered SRS in repo |
+| 1 | S1.1, S1.2, S1.4 | Widget extraction and server segment grammar round-trip cleanly (shared fixtures) |
+| 2 | S1.3, S1.5, S10.2 | The two gates exist and pass (mock safety + replayed real responses) |
+| 3 | S1.6, S1.7, S2.1, S2.4 | API serving masked, tier-gated, glossary-enforced translations; queue and quota working |
+| 4 | S3.1, S3.2, S3.3, S3.4, S3.5, S2.3 | Governance and personal-data controls enforced before first external use; S7.0 offline review starts |
+| 5 | S4.1, S4.2, S4.4, S10.4 | Widget translating a real pilot page; fault suite green |
+| 6 | S6.1, S6.2, S6.3 | It looks right on real devices (OFL fallback font) |
+| 7 | S4.3, S7.0 import, S10.1, offline pre-warm (S2.4) | Tier 1 seeded; pilot pages pre-warmed |
+| 8 | Pilot hardening, `/cso`, device matrix | **Pilot-ready; usability testing begins** |
+| 9+ | E5, E7 (S7.1–S7.3), E9, E8 | Audio, review UI, operations, then proxy |
 
-Phase 0 of the roadmap in the presentation ends at sprint 4. Phase 1 ends at sprint 8.
+Phase 0 of the roadmap in the presentation now ends at sprint 4, after Sprint 0. Phase 1 ends at sprint 8.
