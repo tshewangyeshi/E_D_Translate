@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from orchestrator.locale import dz
-from tools import check_locale, check_req_ids
+from tools import check_invisible, check_locale, check_req_ids
 
 # Sample IDs are assembled at runtime so the repo-wide ID scan does not see them here.
 _FR = "FR" + "-"
@@ -80,3 +80,18 @@ def test_fr160_render_breaks_are_stripped_before_storage() -> None:
     rendered = dz.insert_breaks(word)
     assert dz.ZWSP in rendered
     assert dz.strip_render_artefacts(rendered) == word
+
+
+@pytest.mark.parametrize("cp", [0x200B, 0x200C, 0xFEFF, 0x00, 0x07])
+def test_fr160_invisible_character_check_catches_literals(tmp_path: Path, cp: int) -> None:
+    _write(tmp_path, "orchestrator/x.py", "value = 'a" + chr(cp) + "b'\n")
+    assert check_invisible.violations(tmp_path)
+
+
+def test_fr160_escaped_invisible_characters_are_fine(tmp_path: Path) -> None:
+    _write(tmp_path, "orchestrator/x.py", "ZWSP = '" + chr(92) + "u200b'\n")
+    assert check_invisible.violations(tmp_path) == []
+
+
+def test_fr160_current_repo_has_no_invisible_characters() -> None:
+    assert check_invisible.violations() == []

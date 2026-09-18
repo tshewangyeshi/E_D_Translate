@@ -13,7 +13,7 @@ from __future__ import annotations
 TSHEG = "་"  # U+0F0B syllable delimiter (NOT a word boundary)
 SHAD = "།"  # U+0F0D sentence terminator
 DOUBLE_SHAD = "༎"  # U+0F0E
-ZWSP = "​"
+ZWSP = "\u200b"
 
 TIBETAN_DIGITS = "༠༡༢༣༤༥༦༧༨༩"  # U+0F20..U+0F29
 
@@ -22,7 +22,7 @@ TIBETAN_DIGITS = "༠༡༢༣༤༥༦༧༨༩"  # U+0F20..U+0F29
 SPLIT_TERMINATORS: frozenset[str] = frozenset({SHAD, DOUBLE_SHAD, ".", "!", "?"})
 
 #: Characters that must never appear in stored text or TTS input (FR-160, FR-330).
-RENDER_ARTEFACTS: frozenset[str] = frozenset({ZWSP, "‌", "﻿"})
+RENDER_ARTEFACTS: frozenset[str] = frozenset({ZWSP, "\u200c", "\ufeff"})
 
 
 def insert_breaks(text: str) -> str:

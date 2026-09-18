@@ -118,12 +118,13 @@ Requirements: FR-122, FR-123 · Gate: NFR-200 · [ER-2, ER-10]
 
 ### S1.6 — Glossary substitution
 Requirements: FR-400, FR-401, FR-402 · [ER-7]
-- [ ] Longest-match-first substitution from a versioned termbase
-- [ ] Case-sensitive matching per entry flag
-- [ ] The English term never reaches the model; the approved Dzongkha string always appears in output
-- [ ] Each term carries `term_id` + `term_version`; each segment computes its glossary fingerprint `gfp` from matched terms
-- [ ] Glossary compliance rate reported per batch
-- [ ] Termbase loads from a versioned file; version is exposed in API responses
+- [x] Longest-match-first, whole-word substitution from a versioned termbase (`orchestrator/pipeline/glossary.py`)
+- [x] Case-sensitive matching per entry flag
+- [x] The English term never reaches the model; the approved Dzongkha string always appears in output, or the block falls back (`glossary_term_missing`) — tested against the adversarial mock
+- [x] Each term carries `term_id` + `term_version`; each segment computes its glossary fingerprint `gfp` from matched terms; bumping one term changes only segments using it
+- [x] Glossary compliance rate computed per batch (`ComplianceStats`); reporting it in API metrics lands with S2.3
+- [x] Termbase loads from a versioned file with validation (duplicate ids, ambiguous sources, numerals in sources, delimiters, zero-width characters in targets rejected); the version is exposed on the `Termbase` object — adding it to API responses lands with S2.1
+- [ ] Real DCDD termbase — *the sample file has dummy targets only*
 
 ### S1.7 — Cache and translation memory
 Requirements: FR-150, FR-151, FR-410, FR-411, FR-510 · [ER-1, ER-12, ER-13, ER-14, ER-21, ER-O3]

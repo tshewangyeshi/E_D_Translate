@@ -194,6 +194,12 @@ Matched terms mask as `⟦T:n⟧` and restore to `term.target`. The model never 
 
 Each `Term` also carries a stable `term_id` and a `term_version` that changes whenever its target changes.
 
+Implementation notes (S1.6):
+- **Matching is whole-word and within one text run.** A term split by inline markup (`Department of <b>Immigration</b>`) is not matched; it shows up as lower compliance, never as a wrong substitution.
+- **Terms whose English contains a numeral are rejected at load.** Entities are masked first, so such a term could never match.
+- **Termbase validation** also rejects duplicate ids, ambiguous sources (same text ignoring case, unless both entries are case-sensitive), placeholder delimiters and zero-width characters in targets (FR-160). Retired terms are skipped.
+- **Leak scan scope:** approved targets may contain Tibetan digits; the leak scan (§2.4) only checks model-authored text, not restored glossary targets.
+
 **Glossary fingerprint [ER-7] (FR-150).** For each segment:
 
 ```python
