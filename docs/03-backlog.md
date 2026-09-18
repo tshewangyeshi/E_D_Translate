@@ -139,7 +139,7 @@ Requirements: FR-150, FR-151, FR-410, FR-411, FR-510 · [ER-1, ER-12, ER-13, ER-
 - [x] One batched TM query per request (asserted); cache backfill
 - [x] Redis unavailable degrades to TM without error (`ResilientCache`; failures counted)
 - [x] Tier 2 persistence only after N distinct clients (`should_persist`; counter failure = do not persist); `expire_machine` retention [ER-O3]
-- [ ] **PostgreSQL and Redis adapters verified against real services** — *code and contract tests written, NOT yet run: Docker was not running (`docker compose up -d`, then `python tools/check.py`)*
+- [x] **PostgreSQL and Redis adapters verified against real services** (2026-09-18): the TM contract suite passes on PostgreSQL 16 as well as in memory, the database trigger refuses content updates and deletes, the Redis cache and distinct-client counter pass, migrations are idempotent; `python tools/check.py --require-integration` green
 
 ---
 
