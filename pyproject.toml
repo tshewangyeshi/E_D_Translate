@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "dzweb: English to Dzongkha web translation middleware (orchestrator)"
 requires-python = ">=3.11"
 dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
   "psycopg[binary]>=3.2",
   "redis>=5.0",
 ]
@@ -11,6 +13,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
+  "httpx>=0.27",
   "hypothesis>=6.100",
   "ruff>=0.6",
   "mypy>=1.11",
@@ -31,6 +34,11 @@ testpaths = ["tests/orchestrator"]
 addopts = "-q"
 markers = [
   "integration: needs PostgreSQL/Redis (docker compose up -d); run by tools/check.py when reachable",
+]
+filterwarnings = [
+  # third-party: starlette TestClient on httpx/anyio; not our code
+  "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+  "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
 ]
 
 [tool.ruff]

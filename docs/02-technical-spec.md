@@ -465,9 +465,10 @@ paths:
                           type: string
                           description: >
                             Final: translated, tier_blocked, entity_check_failed,
-                            tag_fallback, upstream_error. Non-final: pending_mt.
-                          enum: [translated, pending_mt, tier_blocked,
-                                 entity_check_failed, tag_fallback, upstream_error]
+                            glossary_term_missing, tag_fallback, upstream_error.
+                            Non-final: pending_mt.
+                          enum: [translated, pending_mt, tier_blocked, entity_check_failed,
+                                 glossary_term_missing, tag_fallback, upstream_error]
                         origin:
                           type: string
                           enum: [mt, human]

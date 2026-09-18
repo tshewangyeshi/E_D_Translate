@@ -147,14 +147,20 @@ Requirements: FR-150, FR-151, FR-410, FR-411, FR-510 · [ER-1, ER-12, ER-13, ER-
 
 ### S2.1 — `/v1/translate`
 Requirements: FR-100, NFR-100, NFR-412 · [ER-3, ER-O4, ER-O5, ER-O7, ER-O9, ER-21]
-- [ ] Batches up to 64 segments; 413 beyond
-- [ ] Per-segment status, never all-or-nothing; each segment returns `segment_key` and, when translated, `origin`
-- [ ] Upstream failure returns 200 with source text and `upstream_error`; PostgreSQL or Redis failure is also never a 5xx
-- [ ] Live MT only within the per-request budget (proposed 1.5 s) and only with quota-manager tokens; the rest return `pending_mt` + enqueue
-- [ ] p95 under 300 ms on a fully cached batch of 64, measured locally
-- [ ] Under load beyond capacity, uncached work is **enqueued** (bounded depth), not dropped
-- [ ] HTTP caching: body-hash `ETag`; `Cache-Control: no-store` when any segment is `pending_mt`; test proves a pending response is never 304'd after its job completes
-- [ ] Keyless public route with enrolled-origin allowlist and per-origin + per-IP rate limits (429)
+- [x] Batches up to 64 segments; 413 beyond (and for segments over 5,000 characters) (`orchestrator/api/app.py`)
+- [x] Per-segment status, never all-or-nothing; each segment returns `segment_key` and, when translated, `origin` (`orchestrator/service/translate.py`)
+- [x] Upstream failure returns 200 with source text and `upstream_error` (and is queued for retry); a storage outage is also 200 with source text, never a 5xx
+- [x] Live MT only within the per-request budget (1.5 s) and only with quota-manager tokens (`orchestrator/upstream/quota.py`); the rest return `pending_mt` + enqueue
+- [x] Every served translation is re-validated: entities byte-identical, glossary terms restored, tag markers exactly as in the source; invalid model output is never stored
+- [x] p95 under 300 ms on a fully cached batch of 64, measured locally (test)
+- [x] Under load beyond capacity, uncached work is **enqueued** (bounded depth); a full queue still answers with source text and is counted
+- [x] HTTP caching: body-hash `ETag`; `Cache-Control: no-store` when any segment is `pending_mt`; pending responses are never 304'd; the ETag changes when the translation arrives
+- [x] Keyless public route with enrolled-origin allowlist (403) and per-origin + per-client rate limits (429); JSON accepted as `text/plain` so browsers skip the CORS preflight
+- [x] Tier resolution: strictest of site default, request hint and matched selector; a request cannot lower the tier (S3.1 adds server-side path rules)
+- [x] Nothing is sent to MT or stored until N distinct clients have seen a Tier 2 segment (NFR-304)
+- [ ] Real WSO2 translator client — *waits for WSO2 access; the mock implements the same interface*
+- [ ] PostgreSQL job queue and worker — *S2.4; an in-memory queue implements the interface now*
+- [ ] Rate limits shared across API replicas — *in-process for now; Redis-backed when more than one replica runs*
 
 ### S2.3 — Health, metrics, gateway publication
 Requirements: FR-600, FR-610, FR-611 · [ER-O4]
