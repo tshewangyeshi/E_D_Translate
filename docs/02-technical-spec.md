@@ -3,7 +3,7 @@
 
 Companion to `01-srs.md`. Every section cites the requirements it satisfies.
 
-**Revision 2026-09-16:** updated with the remedies approved in `/plan-eng-review` (`docs/designs/dzweb-eng-review.md`). Review item numbers appear as `[ER-n]` (1–21) and `[ER-On]` (outside voice). Requirements introduced by the review are marked **UNNUMBERED** until the numbered SRS (`docs/00-requirements.md`, backlog S0.3) assigns IDs.
+**Revision 2026-09-16:** updated with the remedies approved in `/plan-eng-review` (`docs/designs/dzweb-eng-review.md`). Review item numbers appear as `[ER-n]` (1–21) and `[ER-On]` (outside voice). Requirements introduced by the review carry proposed IDs from `docs/00-requirements.md` (status **P**, pending SRS-owner sign-off).
 
 **Pilot scope:** one citizen services portal through the widget. Audio (§2.8, E5), proxy and CMS adapters (§4.2–4.3, E8) and the crawler (S9.2) come after the pilot [ER-4, ER-O6, ER-O7].
 
@@ -35,22 +35,24 @@ orchestrator/
     tm.py          PostgreSQL translation memory              FR-410..411   [ER-14]
     audio.py       object storage (post-pilot)                FR-301..302
   queue/
-    jobs.py        Postgres SKIP LOCKED job queue + sweeper   UNNUMBERED    [ER-3]
-    worker.py      MT worker process                          UNNUMBERED    [ER-3]
+    jobs.py        Postgres SKIP LOCKED job queue + sweeper   FR-155        [ER-3]
+    worker.py      MT worker process                          FR-155..156   [ER-3]
   governance/
     tiers.py       tier authority + gate before lookup        FR-500..511   [ER-1, ER-6]
-    privacy.py     personal-data controls, retention          UNNUMBERED    [ER-O3]
+    privacy.py     personal-data controls, retention          NFR-304..305  [ER-O3]
     audit.py       audit trail                                FR-620
   review/          reviewer API and UI (post-pilot)           FR-420..421, 430..431
   ops/
     fetch.py       the ONLY server-side HTTP fetcher          NFR-301..302  [ER-5]
-    seed.py        offline Tier 1 export/import CLI           UNNUMBERED    [ER-O2]
+    seed.py        offline Tier 1 export/import CLI           FR-413        [ER-O2]
     (health, metrics, enrolment, crawler)                     FR-152, 600..612
-locale/
+orchestrator/locale/
   dz.py            server-side Dzongkha logic                 NFR-500
 ```
 
-**NFR-500 is enforced structurally** [ER-8]: Dzongkha-specific logic has exactly two homes, `locale/dz.py` (server) and `adapters/widget/locale-dz.ts` (browser). A CI check fails on Tibetan-script code points U+0F00–U+0FFF anywhere else except `tests/`, matching **both literal characters and escape forms** (`\u0F..`, `\x{0F..}`, `&#x0F..;`, and decimal entities `&#3840;`–`&#4095;`). The widget's break rule is kept equal to the Python rule by a shared JSON fixture tested from both sides.
+*`locale` lives under `orchestrator/`: a top-level package named `locale` would shadow Python's standard-library `locale` module.*
+
+**NFR-500 is enforced structurally** [ER-8]: Dzongkha-specific logic has exactly two homes, `orchestrator/locale/dz.py` (server) and `adapters/widget/src/locale-dz.ts` (browser). A CI check fails on Tibetan-script code points U+0F00–U+0FFF anywhere else except `tests/`, matching **both literal characters and escape forms** (`\u0F..`, `\x{0F..}`, `&#x0F..;`, and decimal entities `&#3840;`–`&#4095;`). The widget's break rule is kept equal to the Python rule by a shared JSON fixture tested from both sides.
 
 ---
 
@@ -159,7 +161,7 @@ PATTERNS: list[tuple[str, re.Pattern]] = [
 
 Order is longest-context-first: `CUR` must precede `NUM` or "Nu. 1,500" masks as currency-symbol-plus-loose-number and the amount can drift. Matching is left-to-right, non-overlapping, first pattern wins. **The final `NUM` pattern is a catch-all: no digit run may reach the model unmasked** [ER-9].
 
-> **Why this changed [ER-9]:** the earlier `NUM` pattern `\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b` matched nothing for numbers of four or more digits without commas. Verified: `1500`, `2026` and `17123456` all reached the model unmasked. The patterns above were checked against those cases plus word-month dates, `BTN`/`Ngultrum` amounts, reference numbers, trailing punctuation after URLs and amounts, and percentages.
+> **Why this changed [ER-9]:** the earlier `NUM` pattern `\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b` matched nothing for numbers of four or more digits without commas. Verified: `1500`, `2026` and `90000001` all reached the model unmasked. The patterns above were checked against those cases plus word-month dates, `BTN`/`Ngultrum` amounts, reference numbers, trailing punctuation after URLs and amounts, and percentages.
 
 The pattern set is **data, versioned with the pipeline**: any change alters `pipeline_version` automatically (§2.6) [ER-13].
 
@@ -355,7 +357,7 @@ Tier numbers run from 1 (most restrictive) upward, so "the strictest tier wins" 
 
 ### 2.10 translate.py and queue/ — budget, queue, quota [ER-3, ER-O7]
 
-**Live budget.** `/v1/translate` attempts live MT only for Tier 2+ misses, within a per-request budget (proposed 1.5 s total, UNNUMBERED). Segments not finished in budget return `status: "pending_mt"` with source text and are enqueued. The widget re-requests `pending_mt` segments **once**, after about 8 s. If they are still pending, the page stays English for this view.
+**Live budget.** `/v1/translate` attempts live MT only for Tier 2+ misses, within a per-request budget (proposed 1.5 s total, FR-155). Segments not finished in budget return `status: "pending_mt"` with source text and are enqueued. The widget re-requests `pending_mt` segments **once**, after about 8 s. If they are still pending, the page stays English for this view.
 
 **Job queue** (PostgreSQL, no new service):
 - Jobs are claimed with `SELECT … FOR UPDATE SKIP LOCKED` in short transactions, with a partial index on pending rows ordered by priority and age.
@@ -368,7 +370,7 @@ Tier numbers run from 1 (most restrictive) upward, so "the strictest tier wins" 
 
 **Pre-warm before pilot launch:** every enrolled pilot page is translated offline from the Sprint 0 snapshots through the same worker. The pilot has no crawler.
 
-### 2.11 privacy.py — personal data (UNNUMBERED) [ER-O3]
+### 2.11 privacy.py — personal data (NFR-304, NFR-305) [ER-O3]
 
 Entity masking protects numbers, IDs, emails and URLs, **not names or addresses**. A citizen services portal can display both. These controls keep personal data out of WSO2, TM, logs and the review queue:
 
@@ -497,7 +499,7 @@ paths:
 
   /v1/config:
     get:
-      summary: Widget configuration for an enrolled site (UNNUMBERED, ER-6)
+      summary: Widget configuration for an enrolled site (FR-216, ER-6)
       parameters:
         - { name: site, in: query, required: true, schema: { type: string } }
       responses:
@@ -608,7 +610,7 @@ function apply(block: Element, gen: number, runs: string[], origin: "mt" | "huma
   if (!st || st.gen !== gen || !dzOn()) return;                         // stale response guard
   if (runs.length !== st.runs.length) return;                           // structure re-checked client-side
   if (st.runs.some(n => !n.isConnected)) return;
-  if (st.runs.map(n => n.nodeValue).join(" ") !== st.sentText) return; // host changed text mid-flight
+  if (st.runs.map(n => n.nodeValue).join("\u0000") !== st.sentText) return; // host changed text mid-flight
   st.runs.forEach((node, i) => {
     const text = localeDz.insertBreaks(runs[i]);                        // render-time ZWSP, locale-dz.ts (ER-8)
     textState.get(node)!.lastWritten = text;
@@ -645,7 +647,7 @@ function apply(block: Element, gen: number, runs: string[], origin: "mt" | "huma
 - **Text insertion:** translated text only ever enters the page through `nodeValue` or `setAttribute`, never `innerHTML`, so a script-bearing response cannot execute (S4.4).
 
 **Build [ER-O10].** Browsers can't run TypeScript, so "no build step" means **no bundler, no framework, no polyfills**. The only allowed pipeline is:
-1. `tsc` targeting ES2017 with `importHelpers: false`. A CI grep fails on emitted helper functions (`__awaiter`, `__extends`, `__rest`, …).
+1. `tsc` targeting ES2018 (needed for Unicode property escapes such as `\p{L}`; supported by every WebView in the NFR-502 matrix) with `importHelpers: false`. A CI grep fails on emitted helper functions (`__awaiter`, `__extends`, `__rest`, …).
 2. One pinned minifier with bundling off.
 3. A script that writes the content-hashed filename and the SRI hash.
 
@@ -691,12 +693,12 @@ Every row has a test in `tests/fault/` (run by `make check` against real Postgre
 | Host page removes a node the widget registered | `childList` removal / dead `WeakRef` | prune in-flight work; `WeakMap` state collected | FR-210 [ER-19] |
 | Host changes text while Dzongkha is on | characterData ≠ `lastWritten` | update original, re-extract block | FR-212 [ER-11] |
 | Response arrives after toggle-back or host change | generation / sent-text mismatch | discard response | FR-210 [ER-11] |
-| Worker crashes mid-job | visibility timeout | sweeper returns job to pending | UNNUMBERED [ER-3] |
+| Worker crashes mid-job | visibility timeout | sweeper returns job to pending | FR-155 [ER-3] |
 | Traffic spike exhausts live quota | token bucket empty | skip live MT, enqueue; worker keeps reserved share | NFR-412 [ER-O7] |
 | Stampede on a cold cache / termbase publish | queue depth | shed live attempts to the queue (enqueue, not drop); rate-capped re-warm | NFR-412 [ER-3, ER-7] |
 | Fetch redirected to internal IP / DNS rebinding | IP check after resolve and on connect | refuse, log | NFR-301 [ER-5] |
-| Personalised string on an enrolled page | N-distinct-clients threshold | not persisted, not sent to MT | UNNUMBERED [ER-O3] |
-| Offline seed row with broken placeholders | import multiset validation | row rejected with reason | UNNUMBERED [ER-O2] |
+| Personalised string on an enrolled page | N-distinct-clients threshold | not persisted, not sent to MT | NFR-304 [ER-O3] |
+| Offline seed row with broken placeholders | import multiset validation | row rejected with reason | FR-413 [ER-O2] |
 
 ---
 
@@ -729,4 +731,4 @@ Still open:
 7. **WSO2 limits:** rps, max batch, max input length, p95 latency. Measured in Sprint 0 (S0.2) [ER-O7].
 8. **Reviewers:** who at DCDD approves the offline Tier 1 seed, and on what timeline (S7.0) [ER-O2].
 9. **Numbers to confirm:** live budget (1.5 s), re-request delay (8 s), N distinct clients (3), retention (90 days), worker quota share (≥50%).
-10. **The numbered SRS** (`docs/00-requirements.md`) must define every UNNUMBERED item above (S0.3) [ER-O8].
+10. **The numbered SRS** (`docs/00-requirements.md`) is a reconstructed draft: the SRS owner must confirm **R** rows, define **?** rows and accept **P** rows (S0.3) [ER-O8].

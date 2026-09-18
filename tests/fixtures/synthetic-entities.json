@@ -1,0 +1,13 @@
+{
+  "_comment": "SYNTHETIC values only (docs/CLAUDE.md). They keep realistic SHAPES so masking is exercised, but are chosen so they cannot belong to a real person: CIDs start with 000, phone numbers use the unassigned 9 prefix, emails use the RFC 2606 reserved .example TLD, and addresses are fictional. Never replace with real citizen data.",
+  "citizen_ids": ["00012345678", "00098765432", "00055550001"],
+  "file_references": ["MoXX/DEMO/2026/123", "DEMO-HR/2025/0457", "EX/IMM/2026/88"],
+  "phone_numbers": ["90000001", "90000002", "+975 9 000003"],
+  "emails": ["applications@portal.gov.example", "help.desk@portal.gov.example"],
+  "urls": ["https://portal.gov.example/services/renewal", "https://www.gov.example/fees?year=2026"],
+  "currency_amounts": ["Nu. 500", "Nu. 1,500", "BTN 2500.50", "Ngultrum 300"],
+  "dates": ["30 June 2026", "June 30, 2026", "2026-06-30", "30/06/2026", "1st July 2026"],
+  "percentages": ["12.5%", "10 %"],
+  "names": ["Example Citizen", "Test Applicant", "Sample Resident"],
+  "addresses": ["House No. 0, Example Lane, Demo Town"]
+}

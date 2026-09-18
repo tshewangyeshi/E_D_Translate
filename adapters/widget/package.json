@@ -1,0 +1,17 @@
+{
+  "name": "@dzweb/widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dzweb browser widget: in-place English to Dzongkha translation (FR-200..218)",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "jsdom": "^25.0.1",
+    "typescript": "~5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

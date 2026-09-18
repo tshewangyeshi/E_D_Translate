@@ -16,3 +16,8 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+# Local tooling
+.ruff_cache/
+*.egg-info/
+build/
+adapters/widget/dist/

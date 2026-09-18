@@ -5,7 +5,7 @@ Stories are sized for one gstack sprint each: `/spec` or `/autoplan` → impleme
 
 Sequence within an epic is dependency-ordered. Epics E1 and E2 are not parallelisable with anything — everything else depends on the pipeline existing. **E0 (Sprint 0) comes before everything:** it decides whether the placeholder approach works at all.
 
-**Revision 2026-09-16:** updated with the remedies approved in `/plan-eng-review` (`docs/designs/dzweb-eng-review.md`), cited as `[ER-n]` / `[ER-On]`. Requirements introduced by the review are **UNNUMBERED** until S0.3 lands the numbered SRS. **Pilot scope:** one citizen services portal through the widget. Audio (E5), proxy and CMS (E8) and the crawler (S9.2) are post-pilot.
+**Revision 2026-09-16:** updated with the remedies approved in `/plan-eng-review` (`docs/designs/dzweb-eng-review.md`), cited as `[ER-n]` / `[ER-On]`. Requirements introduced by the review carry proposed IDs from `docs/00-requirements.md` (status **P**, pending SRS-owner sign-off). **Pilot scope:** one citizen services portal through the widget. Audio (E5), proxy and CMS (E8) and the crawler (S9.2) are post-pilot.
 
 ---
 
@@ -27,7 +27,7 @@ Nothing in E1 depends on a guess. This epic measures the real NMT endpoint and l
 
 ### S0.1 — Placeholder survival go/no-go
 **As** the team, **I need** to know which placeholder format survives the real NLLB deployment, **so that** restoration isn't built on a token format that `<unk>`s or gets dropped.
-Requirements: FR-120, FR-122, FR-140, FR-141 · UNNUMBERED [ER-O1]
+Requirements: FR-120, FR-122, FR-140, FR-141 · measurement task [ER-O1]
 - [ ] Ask the NMT operator whether custom tokens exist in the deployed tokenizer; record the answer
 - [ ] ~20 public pilot-portal page snapshots committed to `tests/fixtures/gov-pages/` (personal data replaced with `synthetic-entities.json` values)
 - [ ] Each masked block sent to WSO2 **once** per candidate format (at least 3, e.g. `⟦N⟧`, `<x1/>`-style, spelled sentinels); raw responses recorded to `tests/fixtures/mt-replay/`, keyed by source hash + model version + format
@@ -37,16 +37,18 @@ Requirements: FR-120, FR-122, FR-140, FR-141 · UNNUMBERED [ER-O1]
 *gstack:* `/spec` → run → decision recorded; `/codex` second opinion if GovTech policy allows (see `TODOS.md`)
 
 ### S0.2 — WSO2 capacity measurement
-Requirements: NFR-100, NFR-412 · UNNUMBERED [ER-O7]
+Requirements: NFR-100, NFR-412, FR-156 · [ER-O7]
 - [ ] Measured and documented: requests per second, maximum batch size, maximum input length, p95 latency, behaviour at the limit (429 vs queueing)
 - [ ] Capacity note in the spec: pilot pages × segments per page vs quota, including the offline pre-warm time
 - [ ] Token-bucket sizes for the quota manager (§2.10) derived from these numbers
 
 ### S0.3 — Numbered requirements in the repo
 Requirements: all · [ER-O8]
-- [ ] The numbered SRS defining FR-100..FR-631 and NFR-100..NFR-500 is committed as `docs/00-requirements.md`; `01-srs.md` is clarified as repo guidance
-- [ ] Every UNNUMBERED item in `02-technical-spec.md` and this backlog is assigned an ID by the SRS owner, or explicitly dropped
-- [ ] CI check: any `test_fr…`/`test_nfr…` name or `FR-`/`NFR-` citation in a PR body must exist in `docs/00-requirements.md`
+- [x] A numbered requirements file is committed as `docs/00-requirements.md` (reconstructed draft, 2026-09-18); `01-srs.md` points to it
+- [ ] Replaced or confirmed by the original SRS from DSDD
+- [x] Every previously UNNUMBERED item in `02-technical-spec.md` and this backlog has a proposed ID (status **P**) in the reconstructed `docs/00-requirements.md`
+- [ ] SRS owner signs off: confirms **R** rows, defines **?** rows, accepts or renumbers **P** rows
+- [x] CI check (`tools/check_req_ids.py`, in `make check`): any `test_fr…`/`test_nfr…` name or `FR-`/`NFR-` citation in code and tests must exist in `docs/00-requirements.md` and must not be a **?** row
 *Blocks sprint 1.*
 
 ---
@@ -58,33 +60,33 @@ The engine. Nothing else can start except E0. **Sprint 1 builds what the widget 
 ### S1.1 — Widget block extraction and encoding
 **As** the widget, **I need** to identify which text on a page may be translated and encode each block with its placeholders, **so that** code, scripts and opted-out content are never sent, and every translation can be written back into the same text nodes.
 Requirements: FR-110, FR-111, FR-112, FR-113, FR-120, FR-121 · [ER-2, ER-O6, ER-18]
-- [ ] `adapters/widget/extract.ts` runs under jsdom in vitest
-- [ ] Text inside `script`, `style`, `code`, `pre`, `kbd`, `samp`, `var`, `textarea` is excluded
-- [ ] `translate="no"`, `class="notranslate"`, `data-no-translate`, `data-dz-skip` and configured `private_selectors` exclude the element and all descendants [ER-O3]
-- [ ] Elements with `lang` starting `dz` are excluded
-- [ ] `alt`, `title`, `placeholder` and submit/button `value` are extracted as attribute units; **`aria-label` and `aria-description` are not** [ER-18]
-- [ ] Whitespace-only and punctuation-only nodes produce no unit
-- [ ] A paragraph with inline links and emphasis yields one segment plus an ordered list of its text nodes (runs); void elements become `⟦vN/⟧` markers with no run; nested blocks: innermost wins, and outer text on each side becomes separate segments [ER-2]
-- [ ] Literal `⟦`/`⟧` in source are escaped
-- [ ] Extraction is order-stable: the same document yields the same unit sequence every time
-- [ ] **Shared golden fixtures** `tests/fixtures/extraction/*.json` (HTML → expected segments and runs) pass here and in pytest (S1.2, S8.0b)
+- [x] `adapters/widget/src/extract.ts` runs under jsdom in vitest
+- [x] Text inside `script`, `style`, `code`, `pre`, `kbd`, `samp`, `var`, `textarea` is excluded
+- [x] `translate="no"`, `class="notranslate"`, `data-no-translate`, `data-dz-skip` and configured `private_selectors` exclude the element and all descendants [ER-O3]
+- [x] Elements with `lang` starting `dz` are excluded
+- [x] `alt`, `title`, `placeholder` and submit/button `value` are extracted as attribute units; **`aria-label` and `aria-description` are not** [ER-18]
+- [x] Whitespace-only and punctuation-only nodes produce no unit
+- [x] A paragraph with inline links and emphasis yields one segment plus an ordered list of its text nodes (runs); void elements become `⟦vN/⟧` markers with no run; nested blocks: innermost wins, and outer text on each side becomes separate segments [ER-2]
+- [x] Literal `⟦`/`⟧` in source are escaped
+- [x] Extraction is order-stable: the same document yields the same unit sequence every time
+- [x] **Shared golden fixtures** `tests/fixtures/extraction/*.json` (HTML → expected segments and runs) pass here and in pytest (S1.2, S8.0b)
 *gstack:* `/spec` → implement → `/review`
 
 ### S1.2 — Server segment grammar
 **As** the orchestrator, **I need** to parse and validate placeholder segments from any adapter, **so that** malformed or hostile input never reaches the model.
 Requirements: FR-120, FR-121, FR-124 · [ER-2, ER-10]
-- [ ] Parses wire markers `⟦N⟧…⟦/N⟧`, `⟦vN/⟧`; rejects unescaped delimiters, unbalanced or unknown markers → `tag_fallback` with source text
-- [ ] Round-trip without translation (identity model) reproduces the segment byte-for-byte
-- [ ] Segments over the model limit split at shad or terminal punctuation, never inside a placeholder
-- [ ] Converts wire markers ↔ the model token format chosen in S0.1
-- [ ] Passes the shared extraction fixtures
+- [x] Parses wire markers `⟦N⟧…⟦/N⟧`, `⟦vN/⟧`; rejects unescaped delimiters, unbalanced or unknown markers with a stable cause (mapping to `tag_fallback` lands with the API, S2.1); **client input may not contain entity tokens**
+- [x] Round-trip without translation (identity model) reproduces the segment byte-for-byte (Hypothesis property test)
+- [x] Segments over the model limit split at shad or terminal punctuation, never inside a placeholder
+- [ ] Converts wire markers ↔ the model token format chosen in S0.1 — *two candidates implemented (`wire`, `xml`); final choice waits for S0.1*
+- [x] Passes the shared extraction fixtures
 *gstack:* `/spec` → implement → `/review`
 
 ### S1.3 — Entity masking
 **As** a citizen, **I need** dates and amounts in a notice to be exactly right, **so that** I do not miss a deadline or misread an amount.
 Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
 - [ ] URLs, emails, 11-digit IDs, reference numbers, currency amounts (`Nu.`, `BTN`, `Ngultrum`), ISO/numeric/**word-month** dates, percentages and numbers are masked before the model
-- [ ] **Catch-all numeric pattern:** no digit run of any length reaches the model unmasked (`1500`, `2026`, `17123456` are regression cases)
+- [ ] **Catch-all numeric pattern:** no digit run of any length reaches the model unmasked (`1500`, `2026`, `90000001` are regression cases)
 - [ ] Currency patterns match before bare numbers
 - [ ] **Exact multiset:** each entity token appears exactly once in output; duplicated, invented, truncated or missing tokens → `entity_check_failed` with source text
 - [ ] **Leak scan:** any ASCII or Tibetan digit (U+0F20–0F29), email or URL outside restored entities and glossary terms → `entity_check_failed`
@@ -97,10 +99,10 @@ Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
 ### S1.4 — Adversarial model mock
 **As** a developer, **I need** a model mock that misbehaves on purpose, **so that** restoration and validation are tested against realistic failure rather than a cooperative stub.
 Requirements: supports FR-122, FR-123, FR-141
-- [ ] Mock modes: well-behaved, drops placeholders, duplicates placeholders, reorders placeholders, **invents placeholders, truncates tokens, converts digits to Tibetan, invents numbers**, mangles mask tokens, returns empty, times out, returns 503
-- [ ] Mode mix and rates calibrated from S0.1 recordings
-- [ ] Deterministic under a seed
-- [ ] Used by default in unit tests; real endpoint only in integration tests
+- [x] Mock modes: well-behaved, drops placeholders, duplicates placeholders, reorders placeholders, **invents placeholders, truncates tokens, converts digits to Tibetan, invents numbers**, mangles mask tokens, returns empty, times out, returns 503 (`orchestrator/testing/mock_nmt.py`)
+- [ ] Mode mix and rates calibrated from S0.1 recordings — *waits for WSO2 access*
+- [x] Deterministic under a seed
+- [x] Used by default in unit tests; real endpoint only in integration tests
 *Build this before S1.5.*
 
 ### S1.5 — Restoration and tag validation
@@ -158,7 +160,7 @@ Requirements: FR-600, FR-610, FR-611 · [ER-O4]
 - [ ] FR-600 wording confirmed with GovTech
 
 ### S2.4 — Job queue, worker and quota manager
-Requirements: NFR-412 · UNNUMBERED [ER-3, ER-O7, ER-21]
+Requirements: NFR-412, FR-155, FR-156, NFR-413 · [ER-3, ER-O7, ER-21]
 - [ ] PostgreSQL job table, claimed with `FOR UPDATE SKIP LOCKED` in short transactions; partial index on pending jobs
 - [ ] Unique on `machine_key` for **active** jobs only; invalidated keys can be enqueued again
 - [ ] Visibility-timeout sweeper returns a crashed worker's jobs to pending (fault test)
@@ -197,7 +199,7 @@ Requirements: FR-620
 - [ ] Audit records are append-only
 
 ### S3.4 — Personal-data controls
-Requirements: UNNUMBERED · NFR-303 · [ER-O3]
+Requirements: NFR-304, NFR-305, NFR-303 · [ER-O3]
 - [ ] Pilot enrols public, unauthenticated pages only
 - [ ] Widget loads nothing on pages marked `data-dz-private`; `data-dz-skip` and configured `private_selectors` regions are never extracted
 - [ ] Server normalises numeric and ID-like path segments to `:id` before storage
@@ -327,7 +329,7 @@ S7.0 is **pre-pilot**; the rest of E7 is post-pilot.
 
 ### S7.0 — Offline Tier 1 seed (pre-pilot)
 **As** a citizen on the pilot portal, **I need** the fee and eligibility text in Dzongkha, **so that** the pilot proves the value on the pages that matter most, even before the reviewer UI exists.
-Requirements: FR-410, FR-411, FR-510, FR-620 · UNNUMBERED [ER-O2]
+Requirements: FR-410, FR-411, FR-413, FR-510, FR-620 · [ER-O2]
 - [ ] Named DCDD reviewers and a review timeline are agreed (dependency for sprint 4)
 - [ ] `ops/seed.py export` extracts every Tier 1 segment from the pilot snapshots to XLIFF/spreadsheet, with entity and tag placeholders **locked** (visible, not editable)
 - [ ] Reviewers translate and approve offline

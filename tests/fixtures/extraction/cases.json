@@ -1,0 +1,135 @@
+{
+  "_comment": "Shared golden fixtures (ER-O6). Consumed by adapters/widget (vitest) and tests/orchestrator (pytest). 'slots' are the text between markers; 'slotHasNode' says whether a real text node backs each slot. Synthetic content only.",
+  "cases": [
+    {
+      "name": "inline-link-nested-collapses",
+      "requirements": ["FR-120", "FR-121"],
+      "html": "<p>Click <a href=\"/apply\"><b>here</b></a> to apply.</p>",
+      "expected": {
+        "segments": [
+          {"text": "Click ⟦1⟧here⟦/1⟧ to apply.", "slots": ["Click ", "here", " to apply."], "slotHasNode": [true, true, true], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": []
+      }
+    },
+    {
+      "name": "skipped-tags-and-inline-code",
+      "requirements": ["FR-110"],
+      "html": "<div><p>Hello world</p><script>var x = 1;</script><pre>code block</pre><p>Run <code>npm test</code> now.</p><style>p{}</style></div>",
+      "expected": {
+        "segments": [
+          {"text": "Hello world", "slots": ["Hello world"], "slotHasNode": [true], "tierHint": null, "selectorTier": null},
+          {"text": "Run ⟦v1/⟧ now.", "slots": ["Run ", " now."], "slotHasNode": [true, true], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": []
+      }
+    },
+    {
+      "name": "opt-outs",
+      "requirements": ["FR-111", "FR-112", "NFR-304"],
+      "html": "<div><p translate=\"no\">Keep this</p><p class=\"notranslate\">Keep that</p><div data-no-translate><p>Also kept</p></div><div data-dz-skip><p>Skipped region</p></div><p lang=\"dz\">Already Dzongkha</p><p class=\"profile\">Welcome Example Citizen</p><p>Translate me</p></div>",
+      "options": {"privateSelectors": [".profile"]},
+      "expected": {
+        "segments": [
+          {"text": "Translate me", "slots": ["Translate me"], "slotHasNode": [true], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": []
+      }
+    },
+    {
+      "name": "nested-blocks-innermost-wins",
+      "requirements": ["FR-120"],
+      "html": "<ul><li>Fees <p>Nu. 500 per year</p> apply here</li></ul>",
+      "expected": {
+        "segments": [
+          {"text": "Fees ", "slots": ["Fees "], "slotHasNode": [true], "tierHint": null, "selectorTier": null},
+          {"text": "Nu. 500 per year", "slots": ["Nu. 500 per year"], "slotHasNode": [true], "tierHint": null, "selectorTier": null},
+          {"text": " apply here", "slots": [" apply here"], "slotHasNode": [true], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": []
+      }
+    },
+    {
+      "name": "void-elements-and-alt",
+      "requirements": ["FR-121", "FR-113"],
+      "html": "<p>Line one<br>line two <img src=\"seal.png\" alt=\"Royal seal\"> end</p>",
+      "expected": {
+        "segments": [
+          {"text": "Line one⟦v1/⟧line two ⟦v2/⟧ end", "slots": ["Line one", "line two ", " end"], "slotHasNode": [true, true, true], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": [
+          {"attr": "alt", "text": "Royal seal"}
+        ]
+      }
+    },
+    {
+      "name": "literal-delimiters-escaped",
+      "requirements": ["FR-121"],
+      "html": "<p>Use ⟦ and ⟧ literally</p>",
+      "expected": {
+        "segments": [
+          {"text": "Use ⟦⟦ and ⟧⟧ literally", "slots": ["Use ⟦ and ⟧ literally"], "slotHasNode": [true], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": []
+      }
+    },
+    {
+      "name": "no-letters-no-unit",
+      "requirements": ["FR-112"],
+      "html": "<div><p>   </p><p>—</p><p>2026</p><p>(1)</p></div>",
+      "expected": {"segments": [], "attributes": []}
+    },
+    {
+      "name": "leading-inline-slotless-edges",
+      "requirements": ["FR-121", "FR-122"],
+      "html": "<p><a href=\"/\">Home</a></p>",
+      "expected": {
+        "segments": [
+          {"text": "⟦1⟧Home⟦/1⟧", "slots": ["", "Home", ""], "slotHasNode": [false, true, false], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": []
+      }
+    },
+    {
+      "name": "tier-hints-and-selectors",
+      "requirements": ["FR-500", "FR-512"],
+      "html": "<section data-dz-tier=\"1\"><p>Eligibility rules</p></section><div class=\"fees\"><p>Fee table</p></div><div data-dz-tier=\"banana\"><p>Plain notice</p></div>",
+      "options": {"tier1Selectors": [".fees"]},
+      "expected": {
+        "segments": [
+          {"text": "Eligibility rules", "slots": ["Eligibility rules"], "slotHasNode": [true], "tierHint": 1, "selectorTier": null},
+          {"text": "Fee table", "slots": ["Fee table"], "slotHasNode": [true], "tierHint": null, "selectorTier": 1},
+          {"text": "Plain notice", "slots": ["Plain notice"], "slotHasNode": [true], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": []
+      }
+    },
+    {
+      "name": "attributes-exclude-aria",
+      "requirements": ["FR-113"],
+      "html": "<form><input type=\"submit\" value=\"Apply now\"><input type=\"text\" placeholder=\"Your name\" value=\"typed by user\"><img src=\"s.png\" alt=\"Seal\" title=\"Royal seal\" aria-label=\"Seal image\"><button aria-description=\"Opens form\">Start</button></form>",
+      "expected": {
+        "segments": [
+          {"text": "Start", "slots": ["Start"], "slotHasNode": [true], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": [
+          {"attr": "value", "text": "Apply now"},
+          {"attr": "placeholder", "text": "Your name"},
+          {"attr": "alt", "text": "Seal"},
+          {"attr": "title", "text": "Royal seal"}
+        ]
+      }
+    },
+    {
+      "name": "text-directly-in-div",
+      "requirements": ["FR-120", "FR-121"],
+      "html": "<div>Plain text <span>inline part</span> and <em>more</em></div>",
+      "expected": {
+        "segments": [
+          {"text": "Plain text ⟦1⟧inline part⟦/1⟧ and ⟦2⟧more⟦/2⟧", "slots": ["Plain text ", "inline part", " and ", "more", ""], "slotHasNode": [true, true, true, true, false], "tierHint": null, "selectorTier": null}
+        ],
+        "attributes": []
+      }
+    }
+  ]
+}
