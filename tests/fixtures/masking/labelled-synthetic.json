@@ -1,0 +1,27 @@
+{
+  "_comment": "Hand-labelled SYNTHETIC sentences for masker recall (S1.3, FR-140). Values come from tests/fixtures/synthetic-entities.json and cannot belong to real people. 'split': 'tune' sentences may guide pattern changes; 'heldout' sentences must NOT be used for tuning and are the recall gate. Replaced/extended by hand-labelled pilot snapshots in Sprint 0 (S0.1).",
+  "items": [
+    {"split": "tune", "text": "The renewal fee is Nu. 500 per year.", "entities": [{"value": "Nu. 500", "kind": "CUR"}]},
+    {"split": "tune", "text": "Pay Nu. 1,500 before 30 June 2026.", "entities": [{"value": "Nu. 1,500", "kind": "CUR"}, {"value": "30 June 2026", "kind": "DATE"}]},
+    {"split": "tune", "text": "Enter your CID 00012345678 in the form.", "entities": [{"value": "00012345678", "kind": "CID"}]},
+    {"split": "tune", "text": "Quote reference MoXX/DEMO/2026/123 in all letters.", "entities": [{"value": "MoXX/DEMO/2026/123", "kind": "REF"}]},
+    {"split": "tune", "text": "Call 90000001 during office hours.", "entities": [{"value": "90000001", "kind": "NUM"}]},
+    {"split": "tune", "text": "Write to applications@portal.gov.example for help.", "entities": [{"value": "applications@portal.gov.example", "kind": "EMAIL"}]},
+    {"split": "tune", "text": "Apply online at https://portal.gov.example/services/renewal.", "entities": [{"value": "https://portal.gov.example/services/renewal", "kind": "URL"}]},
+    {"split": "tune", "text": "Fees rose by 12.5% in 2025.", "entities": [{"value": "12.5%", "kind": "PCT"}, {"value": "2025", "kind": "NUM"}]},
+    {"split": "tune", "text": "The office opens on 2026-06-30.", "entities": [{"value": "2026-06-30", "kind": "DATE"}]},
+    {"split": "tune", "text": "Submit form 3 of 12 with a fee of 1500.", "entities": [{"value": "3", "kind": "NUM"}, {"value": "12", "kind": "NUM"}, {"value": "1500", "kind": "NUM"}]},
+    {"split": "tune", "text": "Late applications cost BTN 2500.50 extra.", "entities": [{"value": "BTN 2500.50", "kind": "CUR"}]},
+    {"split": "tune", "text": "The permit is valid for 5 years from 30/06/2026.", "entities": [{"value": "5", "kind": "NUM"}, {"value": "30/06/2026", "kind": "DATE"}]},
+    {"split": "heldout", "text": "Deadline: June 30, 2026, 5 pm.", "entities": [{"value": "June 30, 2026", "kind": "DATE"}, {"value": "5", "kind": "NUM"}]},
+    {"split": "heldout", "text": "A fine of Ngultrum 300 applies after 1st July 2026.", "entities": [{"value": "Ngultrum 300", "kind": "CUR"}, {"value": "1st July 2026", "kind": "DATE"}]},
+    {"split": "heldout", "text": "Contact +975 9 000003 or help.desk@portal.gov.example.", "entities": [{"value": "975", "kind": "NUM"}, {"value": "9", "kind": "NUM"}, {"value": "000003", "kind": "NUM"}, {"value": "help.desk@portal.gov.example", "kind": "EMAIL"}]},
+    {"split": "heldout", "text": "File DEMO-HR/2025/0457 was approved.", "entities": [{"value": "DEMO-HR/2025/0457", "kind": "REF"}]},
+    {"split": "heldout", "text": "Applicants aged 18 to 65 may apply; 10 % are reserved.", "entities": [{"value": "18", "kind": "NUM"}, {"value": "65", "kind": "NUM"}, {"value": "10 %", "kind": "PCT"}]},
+    {"split": "heldout", "text": "CIDs 00098765432 and 00055550001 were verified.", "entities": [{"value": "00098765432", "kind": "CID"}, {"value": "00055550001", "kind": "CID"}]},
+    {"split": "heldout", "text": "See https://www.gov.example/fees?year=2026 for the 2026 schedule.", "entities": [{"value": "https://www.gov.example/fees?year=2026", "kind": "URL"}, {"value": "2026", "kind": "NUM"}]},
+    {"split": "heldout", "text": "Room 204, Block 3, Floor 2.", "entities": [{"value": "204", "kind": "NUM"}, {"value": "3", "kind": "NUM"}, {"value": "2", "kind": "NUM"}]},
+    {"split": "heldout", "text": "Pay Nu.750 at counter 4.", "entities": [{"value": "Nu.750", "kind": "CUR"}, {"value": "4", "kind": "NUM"}]},
+    {"split": "heldout", "text": "Processing takes 7-10 working days.", "entities": [{"value": "7", "kind": "NUM"}, {"value": "10", "kind": "NUM"}]}
+  ]
+}

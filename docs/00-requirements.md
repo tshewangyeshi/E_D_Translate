@@ -37,8 +37,8 @@ Every row has a status:
 | FR-124 | Segments longer than the model's maximum input split at shad, double shad or English terminal punctuation, never inside a placeholder. | R |
 | FR-130 | Speech segments split at shad for segment-level synthesis. | R |
 | FR-140 | Numbers, dates, currency amounts, citizen IDs, file reference numbers, emails and URLs are masked before the model and restored byte-identical. Target 100%. No digit run reaches the model unmasked. [ER-9] | R |
-| FR-141 | If any entity token is missing, duplicated, unknown or malformed in model output, or any restored entity is not byte-identical, the segment returns its source text with `entity_check_failed`. Never partially restored. [ER-10] | R |
-| FR-142 | After restoration, a leak scan rejects any ASCII or Tibetan digit (U+0F20–U+0F29), email or URL outside restored entities and glossary terms. [ER-9] | P |
+| FR-141 | If any entity token is missing, duplicated, unknown or malformed in model output, or any restored entity is not byte-identical, or two entities separated in the source would render touching (merging into a different number), the segment returns its source text with `entity_check_failed`. Never partially restored. [ER-10] | R |
+| FR-142 | After restoration, a leak scan rejects any numeral (any character with a Unicode numeric value, including ASCII and Tibetan digits), email or URL outside restored entities and glossary terms. [ER-9] | P |
 | FR-143 | Cache and translation memory store masked text only; real entity values are never persisted; every response is restored from that request's own entity map. [ER-12] | P |
 | FR-150 | Cache and TM keys include model version (machine translations) and glossary state, so model and terminology changes invalidate affected entries automatically. | R |
 | FR-151 | A Redis hot cache sits in front of translation memory; Redis unavailability degrades to TM/live without error. | R |

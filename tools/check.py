@@ -32,11 +32,22 @@ STEPS: list[tuple[str, list[str], Path]] = [
     ("requirement IDs (S0.3)", [PY, "tools/check_req_ids.py"], ROOT),
     ("locale isolation (NFR-500)", [PY, "tools/check_locale.py"], ROOT),
     ("pipeline change guard", [PY, "tools/check_pipeline_guard.py"], ROOT),
-    ("pytest (orchestrator)", [PY, "-m", "pytest"], ROOT),
+    ("pytest (orchestrator)", [PY, "-m", "pytest", "--ignore=tests/orchestrator/gates"], ROOT),
+    (
+        "entity-preservation gate, mock (NFR-201)",
+        [PY, "-m", "pytest", "tests/orchestrator/gates/test_entity_gate.py"],
+        ROOT,
+    ),
+    (
+        "masker recall, held-out (FR-140)",
+        [PY, "tools/masker_recall.py", "tests/fixtures/masking/labelled-synthetic.json",
+         "--split", "heldout"],
+        ROOT,
+    ),
 ]
 
 NOT_YET: list[tuple[str, str]] = [
-    ("entity-preservation gate (NFR-201)", "arrives with S1.3 masking and S10.2 gates"),
+    ("entity gate on real model output (NFR-201)", "needs WSO2 recordings (S0.1) and S10.2"),
     ("tag-integrity gate (NFR-200)", "arrives with S1.5 restoration, after the Sprint 0 go/no-go"),
     ("widget size budget (FR-201)", "arrives with the S4.1 widget build"),
 ]

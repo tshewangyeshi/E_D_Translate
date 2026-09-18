@@ -21,3 +21,8 @@ Thumbs.db
 *.egg-info/
 build/
 adapters/widget/dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.hypothesis/

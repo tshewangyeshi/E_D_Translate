@@ -170,7 +170,8 @@ Masked form: `⟦NUM:3⟧`. The mapping is held per segment and per request, nev
 **Restoration validation (FR-141) [ER-10, ER-9].** After restoration, the segment is accepted only if **all** of these hold; otherwise the **source text** is returned with `status: "entity_check_failed"`. It is never partially restored.
 1. **Exact multiset:** the entity tokens in the model output equal the input set exactly: every id present once, no duplicates, no unknown ids, no partial or unterminated tokens. The same validator (shared code) checks tag placeholders.
 2. **Byte identity:** every restored entity is byte-identical to its source.
-3. **Leak scan:** outside restored entities and restored glossary terms, the output contains no ASCII digits, no Tibetan digits (U+0F20–U+0F29), no email address and no URL. This catches numbers the model invents or converts to Tibetan digits.
+3. **Leak scan:** outside restored entities and restored glossary terms, the output contains no character with a numeric value (ASCII and Tibetan digits and half-digits, other scripts' numerals, fractions), no email address and no URL. This catches numbers the model invents or converts to Tibetan digits. *Side effect: a source numeral the masker does not cover (e.g. `½`) makes its block fall back to English, which is the safe direction.*
+4. **No merged numbers:** two entities that were separated in the source must not end up touching in the output with only inline tags between them: `1500` and `90000001` would render as `150090000001`. Found by the S1.3 entity gate. A void element (`<br>`, `<img>`) counts as a separator.
 
 **Tests:**
 - Hypothesis property test: random digit strings, dates and amounts in random English contexts always round-trip byte-identical under every adversarial mock mode.

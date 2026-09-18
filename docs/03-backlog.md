@@ -85,15 +85,17 @@ Requirements: FR-120, FR-121, FR-124 · [ER-2, ER-10]
 ### S1.3 — Entity masking
 **As** a citizen, **I need** dates and amounts in a notice to be exactly right, **so that** I do not miss a deadline or misread an amount.
 Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
-- [ ] URLs, emails, 11-digit IDs, reference numbers, currency amounts (`Nu.`, `BTN`, `Ngultrum`), ISO/numeric/**word-month** dates, percentages and numbers are masked before the model
-- [ ] **Catch-all numeric pattern:** no digit run of any length reaches the model unmasked (`1500`, `2026`, `90000001` are regression cases)
-- [ ] Currency patterns match before bare numbers
-- [ ] **Exact multiset:** each entity token appears exactly once in output; duplicated, invented, truncated or missing tokens → `entity_check_failed` with source text
-- [ ] **Leak scan:** any ASCII or Tibetan digit (U+0F20–0F29), email or URL outside restored entities and glossary terms → `entity_check_failed`
-- [ ] All masks restore exactly from **the current request's** entity map; output entities are byte-identical to input
-- [ ] Hypothesis property test: random digit strings, dates and amounts in random contexts round-trip byte-identical under every mock mode
-- [ ] Masker recall measured against hand-labelled snapshots, with a held-out set
-- [ ] The adversarial mock (drops, duplicates, invents, truncates and mangles tokens) cannot produce an altered entity in output — 10,000 randomised runs
+- [x] URLs, emails, 11-digit IDs, reference numbers, currency amounts (`Nu.`, `BTN`, `Ngultrum`), ISO/numeric/**word-month** dates, percentages and numbers are masked before the model (`orchestrator/pipeline/protect.py`)
+- [x] **Catch-all numeric pattern:** no digit run of any length, in any script, reaches the model unmasked (`1500`, `2026`, `90000001` are regression cases)
+- [x] Currency patterns match before bare numbers
+- [x] **Exact multiset:** each entity token appears exactly once in output; duplicated, invented, truncated or missing tokens → `entity_check_failed` with source text
+- [x] **Leak scan:** any numeral (ASCII, Tibetan, other scripts, fractions), email or URL outside restored entities and glossary terms → `entity_check_failed`
+- [x] **No merged numbers** (found by the gate): entities newly touching across invisible inline tags → `entity_check_failed`
+- [x] All masks restore exactly from **the current request's** entity map; output entities are byte-identical to input
+- [x] Hypothesis property tests: entity-rich sentences mask and restore byte-identical; any digit run in any script is masked
+- [x] Recall tool (`tools/masker_recall.py`, in `make check`): 100% on a synthetic labelled set with held-out split
+- [ ] Masker recall on **hand-labelled pilot snapshots** with a held-out set — *waits for Sprint 0 snapshots (S0.1)*
+- [x] The adversarial mock cannot produce an altered entity in output — 10,000 seeded runs across both candidate token formats (`tests/orchestrator/gates/test_entity_gate.py`); verified by mutation to catch the merged-number bug
 *gstack:* `/spec` → implement → `/review` → `/codex` (second opinion if policy allows — this is the highest-consequence module)
 
 ### S1.4 — Adversarial model mock
