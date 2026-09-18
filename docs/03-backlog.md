@@ -171,13 +171,18 @@ Requirements: FR-600, FR-610, FR-611 · [ER-O4]
 
 ### S2.4 — Job queue, worker and quota manager
 Requirements: NFR-412, FR-155, FR-156, NFR-413 · [ER-3, ER-O7, ER-21]
-- [ ] PostgreSQL job table, claimed with `FOR UPDATE SKIP LOCKED` in short transactions; partial index on pending jobs
-- [ ] Unique on `machine_key` for **active** jobs only; invalidated keys can be enqueued again
-- [ ] Visibility-timeout sweeper returns a crashed worker's jobs to pending (fault test)
-- [ ] Enqueue skipped when a current translation already exists
-- [ ] Token-bucket quota manager sized from S0.2 reserves ≥50% of upstream capacity for the worker; live attempts use leftover tokens only
-- [ ] Offline pre-warm CLI translates every enrolled pilot page from snapshots through the worker before launch
-- [ ] Rate-capped re-warm for glossary and model invalidations
+- [x] PostgreSQL job table (`migrations/0002_jobs.sql`), claimed with `FOR UPDATE SKIP LOCKED` in short statements; partial index on ready jobs; priorities (live-deferred 50, pre-warm 100, re-warm 150)
+- [x] Unique on `machine_key` for **active** jobs only; completed keys can be enqueued again
+- [x] Visibility-timeout sweeper returns a crashed worker's jobs to pending; a late crashed worker cannot finish a job it no longer owns (tests on both backends)
+- [x] Enqueue skipped when a current translation already exists (ER-21), and for 24 h after a validation failure (a deterministic model would fail again on every page view)
+- [x] Upstream errors retry with exponential backoff up to 5 attempts; invalid model output is never stored and never retried
+- [x] Worker validates model output on masked text only (`pipeline/validate.py`), with the same rules as the live path; refuses jobs from another model version
+- [x] Concurrency: 4 workers claiming 200 jobs on PostgreSQL never claim the same job (integration test)
+- [x] Token-bucket quota manager reserves the worker's share (default 50%); the worker only uses that share, live only the rest — *sizes still need the S0.2 measurements*
+- [x] Pre-warm: `npm run build && node scripts/export-segments.mjs` runs the real widget extractor over snapshots; `python -m orchestrator.ops.prewarm` queues Tier 2 segments at pre-warm priority, skips duplicates and already-translated keys, and lists Tier 1 segments for the S7.0 human review. *Needs the pilot snapshots (S0.1).*
+- [x] Runnable services with production wiring (`orchestrator/wiring.py`): `uvicorn orchestrator.main:create --factory`, `python -m orchestrator.queue.run_worker`; the mock translator requires an explicit opt-in so fake output can never be deployed by accident
+- [~] Rate-capped re-warm after glossary and model invalidations: **re-warm happens through normal misses**, capped by the live quota and the bounded queue. A proactive re-warm job cannot be rebuilt from the TM, because stored sources already carry the old term placeholders; re-running pre-warm on the snapshots is the explicit route.
+- [ ] Connection pool for PostgreSQL — *wiring uses one connection per process: correct, but requests are serialised on it; must be pooled before the pilot (TODOS.md)*
 
 ---
 

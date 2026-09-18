@@ -17,8 +17,7 @@ from fastapi.testclient import TestClient
 from orchestrator.api.ratelimit import RateLimiter
 from orchestrator.pipeline.segment import parse
 from orchestrator.testing.mock_nmt import Mode
-
-from .conftest import LEGAL_ORIGIN, ORIGIN, Rig, body, make_client, make_rig
+from orchestrator.testing.rig import LEGAL_ORIGIN, ORIGIN, Rig, body, make_client, make_rig
 
 H = {"Origin": ORIGIN}
 

@@ -28,4 +28,30 @@
 **Priority:** P2
 **Depends on:** None
 
+## Before the pilot
+
+### PostgreSQL connection pool
+
+**What:** Replace the single connection per process in `orchestrator/wiring.py` with a `psycopg_pool` pool, and run store calls off the event loop (or switch to psycopg's async API).
+
+**Why:** Correct today but serialised: every request in an API process shares one connection and blocks the event loop during database I/O. Fine for tests, not for pilot traffic.
+
+**Context:** The TM, queue and seen-counter already sit behind interfaces, so this is contained to wiring plus the Postgres adapters. NFR-100 (p95 < 300 ms cached) should be re-measured against real PostgreSQL afterwards.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** None
+
+### Trusted-proxy client addresses
+
+**What:** Read the client address from `X-Forwarded-For` only when the direct peer is a configured trusted proxy (WSO2 / load balancer).
+
+**Why:** Behind a proxy every citizen shares the proxy's address, which breaks both the N-distinct-clients rule (NFR-304: nothing would ever be translated) and the per-client rate limit (everyone throttled together).
+
+**Context:** `orchestrator/api/app.py` uses `request.client.host`. Needs the deployment topology (FR-600) to know which proxies to trust. Must be tested with spoofed headers from untrusted peers.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** WSO2/deployment topology
+
 ## Completed

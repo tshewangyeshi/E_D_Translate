@@ -1,4 +1,4 @@
-"""Store fixtures: in-memory always; PostgreSQL/Redis when reachable (docker compose up -d).
+"""Shared fixtures: in-memory always; PostgreSQL/Redis when reachable (docker compose up -d).
 
 Integration parameters are marked ``integration`` and skipped WITH A REASON when
 the services are down; tools/check.py reports that explicitly as NOT RUN.
@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from orchestrator.queue.jobs import InMemoryQueue
 from orchestrator.store.tm import InMemoryTM
 
 # Throwaway local container from docker-compose.yml (trust auth, 127.0.0.1 only): no credential.
@@ -77,6 +78,35 @@ def tm(request: pytest.FixtureRequest) -> Any:
     from orchestrator.store.postgres_tm import PostgresTM
 
     return PostgresTM(request.getfixturevalue("pg_conn"))
+
+
+@pytest.fixture(
+    params=[
+        "memory",
+        pytest.param("postgres", marks=[pytest.mark.integration, _SKIP_PG]),
+    ]
+)
+def work_queue(request: pytest.FixtureRequest) -> Any:
+    """A (queue, tm) pair on the same backend, so 'already translated' checks line up."""
+    if request.param == "memory":
+        tm = InMemoryTM()
+
+        def translated(key: str) -> bool:
+            return key in tm.lookup([], [key])[1]
+
+        return InMemoryQueue(max_depth=100, translated=translated), tm
+    from orchestrator.queue.postgres_queue import PostgresJobQueue
+    from orchestrator.store.postgres_tm import PostgresTM
+
+    conn = request.getfixturevalue("pg_conn")
+    return PostgresJobQueue(conn, max_depth=100), PostgresTM(conn)
+
+
+@pytest.fixture
+def redis_url() -> str:
+    if not _REDIS:
+        pytest.skip("Redis not reachable: docker compose up -d")
+    return REDIS_URL
 
 
 @pytest.fixture

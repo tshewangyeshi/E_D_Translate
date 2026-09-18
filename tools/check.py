@@ -93,7 +93,7 @@ def main() -> int:
     if all(up.values()):
         steps.append(
             (
-                "integration: PostgreSQL + Redis (S1.7)",
+                "integration: PostgreSQL + Redis",
                 [PY, "-m", "pytest", "-m", "integration"],
                 ROOT,
             )

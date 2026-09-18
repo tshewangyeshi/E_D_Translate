@@ -42,7 +42,7 @@ from orchestrator.pipeline.glossary import (
 from orchestrator.pipeline.protect import EntityCheckError, EntityMap, mask, restore
 from orchestrator.pipeline.segment import ModelFormat, Segment, SegmentError, parse
 from orchestrator.pipeline.tags import check_tags
-from orchestrator.queue.jobs import Job, JobQueue
+from orchestrator.queue.jobs import PRIORITY_LIVE_DEFERRED, Job, JobQueue
 from orchestrator.store.keys import SegmentKeys, Versions, keys_for
 from orchestrator.store.lookup import Hit, LookupItem, TranslationStore
 from orchestrator.store.models import Origin
@@ -178,6 +178,24 @@ class TranslateService:
 
     # -- steps ----------------------------------------------------------------
 
+    def prepare(self, site: Site, seg_in: SegmentIn) -> _Prepared:
+        """Parse, mask, apply the glossary, derive keys and tier. Raises SegmentError."""
+        return self._prepare(site, seg_in)
+
+    def job_for(self, site: Site, p: _Prepared, priority: int = PRIORITY_LIVE_DEFERRED) -> Job:
+        """A queue job for a prepared segment. Masked text only (FR-143)."""
+        return Job(
+            machine_key=p.keys.machine_key,
+            segment_key=p.keys.segment_key,
+            approved_key=p.keys.approved_key,
+            masked_source=p.with_terms.to_wire(),
+            gfp=p.keys.gfp,
+            term_ids=tuple(sorted({t.term_id for t in p.terms.values()})),
+            site_id=site.site_id,
+            model_version=self.translator.model_version,
+            priority=priority,
+        )
+
     def _prepare(self, site: Site, seg_in: SegmentIn) -> _Prepared:
         source = parse(seg_in.text)  # client input: entity tokens are rejected (S1.2)
         masked, entities = mask(source)
@@ -214,17 +232,8 @@ class TranslateService:
             return False
 
     def _enqueue(self, site: Site, p: _Prepared) -> bool:
-        job = Job(
-            machine_key=p.keys.machine_key,
-            segment_key=p.keys.segment_key,
-            approved_key=p.keys.approved_key,
-            masked_source=p.with_terms.to_wire(),
-            gfp=p.keys.gfp,
-            term_ids=tuple(sorted({t.term_id for t in p.terms.values()})),
-            site_id=site.site_id,
-        )
         try:
-            queued = self.queue.enqueue(job)
+            queued = self.queue.enqueue(self.job_for(site, p))
         except Exception:  # noqa: BLE001 - a queue outage must not fail the request
             queued = False
         if not queued:

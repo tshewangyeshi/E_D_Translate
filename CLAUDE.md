@@ -18,6 +18,17 @@ docker compose up -d           # throwaway PostgreSQL (55432) + Redis (56379) fo
 python tools/check.py          # = make check; CI adds --require-integration
 ```
 
+Run locally (fake translator; configuration in `orchestrator/wiring.py`):
+
+```bash
+export DZWEB_PG_DSN=postgresql://dzweb@127.0.0.1:55432/dzweb_test DZWEB_REDIS_URL=redis://127.0.0.1:56379/0
+export DZWEB_TERMBASE=tests/fixtures/glossary/termbase-sample.json DZWEB_SITES=sites.json
+export DZWEB_TRANSLATOR=mock DZWEB_ALLOW_MOCK_TRANSLATOR=1   # dev only: output is "DZ:" + English
+uvicorn orchestrator.main:create --factory                   # API
+python -m orchestrator.queue.run_worker                      # background worker
+python -m orchestrator.ops.prewarm --site portal segments.json   # after npm run build && node adapters/widget/scripts/export-segments.mjs
+```
+
 - Python code: `orchestrator/` (pipeline in `orchestrator/pipeline/`, Dzongkha specifics only in `orchestrator/locale/dz.py`).
 - Widget: `adapters/widget/` (TypeScript, vitest + jsdom). Dzongkha specifics only in `src/locale-dz.ts`.
 - Shared extraction fixtures: `tests/fixtures/extraction/cases.json` (run by both vitest and pytest).

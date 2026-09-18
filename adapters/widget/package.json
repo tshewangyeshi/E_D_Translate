@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json",
+    "export-segments": "node scripts/export-segments.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
