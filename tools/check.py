@@ -9,6 +9,7 @@ silently skipped.
 from __future__ import annotations
 
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -41,8 +42,13 @@ STEPS: list[tuple[str, list[str], Path]] = [
     ),
     (
         "masker recall, held-out (FR-140)",
-        [PY, "tools/masker_recall.py", "tests/fixtures/masking/labelled-synthetic.json",
-         "--split", "heldout"],
+        [
+            PY,
+            "tools/masker_recall.py",
+            "tests/fixtures/masking/labelled-synthetic.json",
+            "--split",
+            "heldout",
+        ],
         ROOT,
     ),
 ]
@@ -52,6 +58,20 @@ NOT_YET: list[tuple[str, str]] = [
     ("tag-integrity gate (NFR-200)", "arrives with S1.5 restoration, after the Sprint 0 go/no-go"),
     ("widget size budget (FR-201)", "arrives with the S4.1 widget build"),
 ]
+
+
+INTEGRATION_PORTS = {"PostgreSQL": 55432, "Redis": 56379}  # docker-compose.yml
+
+
+def services_up() -> dict[str, bool]:
+    up = {}
+    for name, port in INTEGRATION_PORTS.items():
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                up[name] = True
+        except OSError:
+            up[name] = False
+    return up
 
 
 def run(name: str, cmd: list[str], cwd: Path) -> bool:
@@ -67,7 +87,17 @@ def run(name: str, cmd: list[str], cwd: Path) -> bool:
 
 
 def main() -> int:
+    require_integration = "--require-integration" in sys.argv[1:]
     steps = list(STEPS)
+    up = services_up()
+    if all(up.values()):
+        steps.append(
+            (
+                "integration: PostgreSQL + Redis (S1.7)",
+                [PY, "-m", "pytest", "-m", "integration"],
+                ROOT,
+            )
+        )
     try:
         npx = _npx()
         steps += [
@@ -83,7 +113,15 @@ def main() -> int:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
     for name, why in NOT_YET:
         print(f"  TODO  {name}: {why}")
+    missing = [n for n, ok in up.items() if not ok]
+    if missing:
+        print(
+            f"  NOT RUN  integration tests: {', '.join(missing)} not reachable "
+            "(start Docker, then: docker compose up -d)"
+        )
     failed = [n for n, ok in results if not ok]
+    if missing and require_integration:
+        failed.append("integration services unavailable (--require-integration)")
     print(f"\n{'FAILED: ' + ', '.join(failed) if failed else 'All present checks passed.'}")
     return 1 if failed else 0
 

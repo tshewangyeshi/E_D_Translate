@@ -14,7 +14,8 @@ Requirement IDs (FR-xxx, NFR-xxx) are the vocabulary of this repo: commit messag
 ```bash
 python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"   # Linux/macOS: .venv/bin/python
 (cd adapters/widget && npm ci)
-python tools/check.py          # = make check: ruff, mypy, requirement IDs, NFR-500, pipeline guard, pytest, tsc, vitest
+docker compose up -d           # throwaway PostgreSQL (55432) + Redis (56379) for integration tests
+python tools/check.py          # = make check; CI adds --require-integration
 ```
 
 - Python code: `orchestrator/` (pipeline in `orchestrator/pipeline/`, Dzongkha specifics only in `orchestrator/locale/dz.py`).

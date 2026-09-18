@@ -128,17 +128,18 @@ Requirements: FR-400, FR-401, FR-402 · [ER-7]
 
 ### S1.7 — Cache and translation memory
 Requirements: FR-150, FR-151, FR-410, FR-411, FR-510 · [ER-1, ER-12, ER-13, ER-14, ER-21, ER-O3]
-- [ ] Keys are computed from the **masked** normalised segment, language pair, derived `pipeline_version`, `gfp`, and (machine keys only) model version
-- [ ] Redis values and TM rows contain **masked text only**; test: "Pay Nu. 500" and "Pay Nu. 600" share one entry and each restores its own amount; whitespace/NFC variants keep their own bytes
-- [ ] **Tier gate before lookup:** Tier 1 reads only approved (`origin = human`) translations; `test_fr510_tier1_never_served_cached_mt` fills the cache from a Tier 2 request and asserts Tier 1 gets `tier_blocked`
-- [ ] Lookup order for Tier 2+: approved → machine → live within budget → `pending_mt` + enqueue
-- [ ] `pipeline_version` is derived from pattern data, segmentation rules and the golden fixtures' masked output; changing a pattern changes it, and a pure refactor does not
-- [ ] Data model: `segment` / immutable `translation_version` / mutable `review_item`; approving creates a new version row and never overwrites; no tier column on content
-- [ ] Publishing a term change invalidates **exactly** the segments containing that term (via `term_id → keys` index); machine rows re-warm rate-capped; approved rows → `needs_recheck`, not served
-- [ ] A `pipeline_version` change migrates approved rows: unchanged output → re-key; changed → `needs_recheck`
-- [ ] One batched TM query per request
-- [ ] Redis unavailable degrades to TM/live without error; no enqueue for keys already translated
-- [ ] Tier 2 segments are not persisted until seen from N distinct clients; unapproved machine rows expire after the retention period [ER-O3]
+- [x] Keys are computed from the **masked** normalised segment, language pair, derived `pipeline_version`, `gfp`, and (machine keys only) model version (`orchestrator/store/keys.py`)
+- [x] Redis values and TM rows contain **masked text only**; "Pay Nu. 500" and "Pay Nu. 600" share one entry and each restores its own amount; whitespace variants share a key and keep their own bytes
+- [x] **Tier gate before lookup** (`orchestrator/store/lookup.py`): Tier 1 reads only approved translations; machine values in the approved namespace are ignored; unknown or non-integer tiers are Tier 1; `test_fr510_tier1_never_served_cached_mt`
+- [x] Lookup order for Tier 2+: approved → machine → miss (live within budget / `pending_mt` land with S2.1 and S2.4); an approval supersedes a cached machine translation immediately (FR-421)
+- [x] `pipeline_version` is derived (`orchestrator/pipeline/version.py`) from pattern data, grammar, split terminators and a golden corpus; tests prove a pattern change or a golden-output change alters it
+- [x] Data model: `segment` / immutable `translation_version` (database trigger refuses content updates and deletes) / mutable `review_item`; approving creates a new version row; no tier column (`orchestrator/store/migrations/0001_initial.sql`)
+- [x] Publishing a term change invalidates **exactly** the versions containing that term (index `glossary_hit(term_id, segment_key, gfp)`, robust to re-keying); approved → `needs_recheck`, not served; cache entries purged. *Rate-capped re-warm arrives with the S2.4 queue.*
+- [x] A `pipeline_version` change migrates approved rows: re-key if unchanged, `needs_recheck` if changed
+- [x] One batched TM query per request (asserted); cache backfill
+- [x] Redis unavailable degrades to TM without error (`ResilientCache`; failures counted)
+- [x] Tier 2 persistence only after N distinct clients (`should_persist`; counter failure = do not persist); `expire_machine` retention [ER-O3]
+- [ ] **PostgreSQL and Redis adapters verified against real services** — *code and contract tests written, NOT yet run: Docker was not running (`docker compose up -d`, then `python tools/check.py`)*
 
 ---
 

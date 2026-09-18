@@ -3,7 +3,10 @@ name = "dzweb-orchestrator"
 version = "0.1.0"
 description = "dzweb: English to Dzongkha web translation middleware (orchestrator)"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "psycopg[binary]>=3.2",
+  "redis>=5.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -20,9 +23,15 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["orchestrator*"]
 
+[tool.setuptools.package-data]
+orchestrator = ["pipeline/golden_corpus.json", "store/migrations/*.sql"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests/orchestrator"]
 addopts = "-q"
+markers = [
+  "integration: needs PostgreSQL/Redis (docker compose up -d); run by tools/check.py when reachable",
+]
 
 [tool.ruff]
 target-version = "py311"

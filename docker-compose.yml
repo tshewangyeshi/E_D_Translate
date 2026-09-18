@@ -1,0 +1,17 @@
+# Throwaway services for integration tests (S1.7). Not for production.
+# Uses non-default host ports so it never collides with a local PostgreSQL/Redis.
+services:
+  postgres:
+    image: postgres:16-alpine
+    # No password: trust auth, reachable only from this machine (127.0.0.1), data in tmpfs.
+    environment:
+      POSTGRES_USER: dzweb
+      POSTGRES_DB: dzweb_test
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports: ["127.0.0.1:55432:5432"]
+    tmpfs: ["/var/lib/postgresql/data"]
+  redis:
+    image: redis:7-alpine
+    # volatile-lru: evict only TTL keys (machine translations), never approvals (FR-421).
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "volatile-lru"]
+    ports: ["127.0.0.1:56379:6379"]

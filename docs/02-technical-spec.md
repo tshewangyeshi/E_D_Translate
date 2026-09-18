@@ -309,6 +309,11 @@ CREATE TABLE audit_event (            -- FR-620
 );
 ```
 
+**Implementation notes (S1.7):**
+- The glossary index is `glossary_hit(term_id, segment_key, gfp)` rather than term → lookup key, so it keeps finding the right versions after approvals are re-keyed.
+- **Cache correctness relies on eviction policy:** Redis must run with `maxmemory-policy volatile-lru`. Approvals are stored without TTL and machine translations with TTL, so under memory pressure only machine entries are evicted; `approve()` also evicts the segment's cached machine entry. Together this guarantees a cached machine translation is never served while an approval exists (FR-421). `docker-compose.yml` sets this; production Redis must too.
+- `translation_version` immutability is enforced by a database trigger, not only by application code.
+
 **When `pipeline_version` changes**, approved translations are migrated, not orphaned. The new masker and segmenter run on each approved row's `masked_source`, treating existing placeholders as opaque:
 - **Output unchanged:** the row is re-keyed to the new version.
 - **Output changed** (new entities detected, or a narrowed pattern no longer produces an existing placeholder): the `review_item` moves to `needs_recheck`.
