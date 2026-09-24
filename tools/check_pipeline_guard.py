@@ -21,7 +21,10 @@ TESTS = "tests/orchestrator/"
 
 def _git(*args: str) -> str:
     return subprocess.run(  # noqa: S603 - fixed git arguments
-        ["git", *args], capture_output=True, text=True, check=True  # noqa: S607
+        ["git", *args],  # noqa: S607 - git resolved from PATH, fixed arguments
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
 
 

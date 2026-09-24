@@ -19,12 +19,15 @@ from orchestrator.upstream.quota import QuotaManager
 from orchestrator.upstream.translator import MockTranslator
 from orchestrator.wiring import ConfigError, Settings, build_translator
 
+# "portal" is Tier 2 by default with a Tier 1 rule on /legal/*, so the page path
+# each snapshot was served at decides what may be machine-translated (FR-512).
+PAGE = "/services/renewal"
 SEGMENTS = [
-    {"text": "Passport renewal", "tier": None, "selector_tier": None},
-    {"text": "Pay ⟦1⟧Nu. 500⟦/1⟧ online.", "tier": None, "selector_tier": None},
-    {"text": "Fee table", "tier": None, "selector_tier": 1},
-    {"text": "Passport renewal", "tier": None, "selector_tier": None},  # repeated header
-    {"text": "Broken ⟦1⟧ markup", "tier": None, "selector_tier": None},
+    {"text": "Passport renewal", "tier": None, "selector_tier": None, "path": PAGE},
+    {"text": "Pay ⟦1⟧Nu. 500⟦/1⟧ online.", "tier": None, "selector_tier": None, "path": PAGE},
+    {"text": "Fee table", "tier": None, "selector_tier": 1, "path": PAGE},
+    {"text": "Passport renewal", "tier": None, "selector_tier": None, "path": PAGE},  # repeated
+    {"text": "Broken ⟦1⟧ markup", "tier": None, "selector_tier": None, "path": PAGE},
 ]
 
 
@@ -145,3 +148,24 @@ def test_fr155_production_wiring_serves_a_request(
         assert again.json()["segments"][0]["status"] == "translated"
     finally:
         c.conn.close()
+
+
+def test_fr510_prewarm_never_queues_a_tier1_path() -> None:
+    """A snapshot of /legal/* is listed for human review, not sent to the model."""
+    rig = make_rig(clients_to_persist=3)
+    site = rig.sites.get("portal")
+    assert site is not None
+    legal = [{**s, "path": "/legal/notice"} for s in SEGMENTS]
+    report = prewarm(rig.service, site, legal)
+    assert report.queued == 0
+    assert len(report.tier1_needs_review) == 3  # the 4 valid segments, deduplicated
+    assert rig.queue.depth() == 0
+
+
+def test_fr512_prewarm_without_a_path_does_not_machine_translate() -> None:
+    """Missing path on a site with path rules is Tier 1, never a silent Tier 2."""
+    rig = make_rig(clients_to_persist=3)
+    site = rig.sites.get("portal")
+    assert site is not None
+    report = prewarm(rig.service, site, [{**s, "path": None} for s in SEGMENTS])
+    assert report.queued == 0

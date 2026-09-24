@@ -192,13 +192,15 @@ Deliberately early. Retrofitting tiering after adoption means renegotiating with
 
 ### S3.1 — Content tiering
 Requirements: FR-500, FR-510, FR-511 · [ER-1, ER-6]
-- [ ] **The server resolves the tier:** the strictest of the site default, site path rules, matched site selectors and the request's tier hint. A request can make content stricter, never looser
-- [ ] Absent or unparseable tier, or an unknown site, resolves to Tier 1 (most restrictive)
-- [ ] The tier gate runs **before any cache or TM lookup**; Tier 1 without an approved translation returns `tier_blocked` and the source text — verified by test, not by policy
-- [ ] Test: a request claiming Tier 2 for a path or selector the site marks Tier 1 → `tier_blocked`
-- [ ] `GET /v1/config` returns Tier 1 selectors and private selectors per enrolled site; path and selector rules are audited (S3.3)
+- [x] **The server resolves the tier:** the strictest of the site default, site path rules, matched site selectors and the request's tier hint. A request can make content stricter, never looser
+- [x] Absent or unparseable tier, or an unknown site, resolves to Tier 1 (most restrictive). A path that cannot be normalised is Tier 1, not "no rule matched"; an invalid tier hint is ignored rather than honoured, so garbage cannot loosen
+- [x] The tier gate runs **before any cache or TM lookup**; Tier 1 without an approved translation returns `tier_blocked` and the source text — verified by test, not by policy
+- [x] Test: a request claiming Tier 2 for a path or selector the site marks Tier 1 → `tier_blocked`, including case, encoding, traversal and double-encoding variants of the path
+- [~] `GET /v1/config` returns Tier 1 selectors and private selectors per enrolled site (path rules stay server-side); **auditing of path and selector rules waits for S3.3**
 - [ ] Review-item creation capped per site per day
 - [ ] Tier 2 forces glossary and flags for review
+
+Pre-warm now carries each snapshot's page path (`export-segments.mjs page.html=/the/path`); without one, a site with path rules tiers the page 1 and pre-warm refuses rather than guessing.
 
 ### S3.2 — Machine-translation labelling
 Requirements: FR-520, FR-521, FR-522 · [ER-O9]

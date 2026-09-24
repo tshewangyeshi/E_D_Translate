@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from orchestrator.api.app import create_app
 from orchestrator.api.ratelimit import RateLimiter
-from orchestrator.governance.sites import Site, SiteRegistry
+from orchestrator.governance.sites import PathRule, Site, SiteRegistry
 from orchestrator.pipeline.glossary import Termbase
 from orchestrator.pipeline.segment import MODEL_FORMATS
 from orchestrator.queue.jobs import InMemoryQueue
@@ -72,7 +72,13 @@ def make_rig(
     )
     sites = SiteRegistry(
         [
-            Site("portal", frozenset({ORIGIN}), default_tier=2, tier1_selectors=(".fees",)),
+            Site(
+                "portal",
+                frozenset({ORIGIN}),
+                default_tier=2,
+                tier1_selectors=(".fees",),
+                path_rules=(PathRule("/legal/*", 1),),
+            ),
             Site("legal", frozenset({LEGAL_ORIGIN}), default_tier=1),
         ]
     )

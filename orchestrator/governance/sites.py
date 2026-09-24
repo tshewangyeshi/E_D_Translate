@@ -1,8 +1,8 @@
 """Enrolled sites (FR-601) and tier authority (FR-500, FR-512).
 
-The server decides the effective tier. S2.1 covers the site default, the
-request's hint and the matched configured selector; server-side path rules
-arrive with S3.1.
+The server decides the effective tier: the strictest of the site default, the
+site's path rules, the matched configured selector and the request's hint. A
+request can make content stricter, never looser.
 """
 
 from __future__ import annotations
@@ -11,9 +11,17 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from orchestrator.governance.paths import normalise_path, path_matches
+
 
 class SiteConfigError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class PathRule:
+    pattern: str  # "/legal/notice" or "/legal/*"
+    tier: int
 
 
 @dataclass(frozen=True)
@@ -23,7 +31,22 @@ class Site:
     default_tier: int
     tier1_selectors: tuple[str, ...] = ()
     private_selectors: tuple[str, ...] = ()
+    path_rules: tuple[PathRule, ...] = ()
     enabled: bool = True
+
+    def tier_for_path(self, path: object) -> int | None:
+        """Strictest matching path rule, or None when no rule applies.
+
+        An unusable path is Tier 1, not "no match": a path we cannot normalise
+        is one we cannot prove is outside a Tier 1 rule.
+        """
+        if not self.path_rules:
+            return None
+        normalised = normalise_path(path)
+        if normalised is None:
+            return 1
+        matched = [r.tier for r in self.path_rules if path_matches(r.pattern, normalised)]
+        return min(matched) if matched else None
 
 
 class SiteRegistry:
@@ -50,6 +73,7 @@ class SiteRegistry:
                     default_tier=tier,
                     tier1_selectors=tuple(raw.get("tier1_selectors", ())),
                     private_selectors=tuple(raw.get("private_selectors", ())),
+                    path_rules=_path_rules(raw),
                     enabled=bool(raw.get("enabled", True)),
                 )
             )
@@ -73,18 +97,58 @@ class SiteRegistry:
         return site if origin.rstrip("/") in site.origins else None
 
 
+def _path_rules(raw: dict[str, object]) -> tuple[PathRule, ...]:
+    """Parse and validate ``path_rules``. A rule the operator cannot rely on is refused."""
+    site_id = raw.get("site_id")
+    rules = raw.get("path_rules", [])
+    if not isinstance(rules, list):
+        raise SiteConfigError(f"{site_id}: path_rules must be a list")
+    out = []
+    for entry in rules:
+        if not isinstance(entry, dict):
+            raise SiteConfigError(f"{site_id}: each path rule must be an object")
+        pattern, tier = entry.get("path"), entry.get("tier")
+        if not isinstance(pattern, str) or not pattern.startswith("/"):
+            raise SiteConfigError(f"{site_id}: path rule 'path' must start with '/'")
+        if tier not in (1, 2, 3) or isinstance(tier, bool):
+            raise SiteConfigError(f"{site_id}: path rule tier must be 1, 2 or 3")
+        # Rules are matched against already-normalised paths, so a pattern that
+        # is not itself in normal form ("/legal/../*", "/legal/") can never match.
+        # Refuse it at load: silently keeping it would leave the operator
+        # believing a Tier 1 rule is in force when nothing enforces it.
+        probe = pattern.replace("*", "x")
+        if normalise_path(probe) != probe.lower():
+            raise SiteConfigError(
+                f"{site_id}: path rule {pattern!r} is not in normal form and would never match"
+            )
+        out.append(PathRule(pattern, tier))
+    return tuple(out)
+
+
 def _valid_tier(value: object) -> int | None:
     if isinstance(value, int) and not isinstance(value, bool) and value in (1, 2, 3):
         return value
     return None
 
 
-def resolve_tier(site: Site | None, request_tier: object, selector_tier: object) -> int:
-    """Strictest (lowest-numbered) of site default, selector match and request hint (FR-512).
+def resolve_tier(
+    site: Site | None,
+    request_tier: object,
+    selector_tier: object,
+    path: object = None,
+) -> int:
+    """Strictest (lowest-numbered) of site default, path rule, selector and hint (FR-512).
 
     A request can make content stricter, never looser; an unknown site is Tier 1.
+    An invalid hint is ignored rather than honoured, so garbage cannot loosen a
+    tier; the site's own configuration still applies.
     """
     if site is None:
         return 1
-    candidates = [site.default_tier, _valid_tier(selector_tier), _valid_tier(request_tier)]
+    candidates = [
+        site.default_tier,
+        site.tier_for_path(path),
+        _valid_tier(selector_tier),
+        _valid_tier(request_tier),
+    ]
     return min(t for t in candidates if t is not None)

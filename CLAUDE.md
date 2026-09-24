@@ -26,7 +26,8 @@ export DZWEB_TERMBASE=tests/fixtures/glossary/termbase-sample.json DZWEB_SITES=s
 export DZWEB_TRANSLATOR=mock DZWEB_ALLOW_MOCK_TRANSLATOR=1   # dev only: output is "DZ:" + English
 uvicorn orchestrator.main:create --factory                   # API
 python -m orchestrator.queue.run_worker                      # background worker
-python -m orchestrator.ops.prewarm --site portal segments.json   # after npm run build && node adapters/widget/scripts/export-segments.mjs
+python -m orchestrator.ops.prewarm --site portal segments.json   # after npm run build && node adapters/widget/scripts/export-segments.mjs page.html=/the/site/path
+python tools/demo.py                                             # the pipeline end to end, no Docker needed
 ```
 
 - Python code: `orchestrator/` (pipeline in `orchestrator/pipeline/`, Dzongkha specifics only in `orchestrator/locale/dz.py`).

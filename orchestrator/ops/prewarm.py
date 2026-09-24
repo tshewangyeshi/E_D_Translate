@@ -43,12 +43,19 @@ class PrewarmReport:
 
 
 def prewarm(service: TranslateService, site: Site, segments: list[dict[str, Any]]) -> PrewarmReport:
+    """Queue what may be machine-translated. Each segment carries the page ``path``.
+
+    The path decides the tier (FR-512), so a segment without one is Tier 1 on a
+    site that has path rules: it lands in ``tier1_needs_review`` rather than being
+    translated. That is the safe direction, but it means an export without paths
+    pre-warms nothing -- which the report makes visible.
+    """
     report = PrewarmReport()
     prepared = []
     for n, raw in enumerate(segments):
         seg_in = SegmentIn(f"p{n}", str(raw["text"]), raw.get("tier"), raw.get("selector_tier"))
         try:
-            prepared.append(service.prepare(site, seg_in))
+            prepared.append(service.prepare(site, seg_in, raw.get("path")))
         except SegmentError:
             report.invalid += 1
     unique = {p.keys.machine_key: p for p in prepared}.values()  # a page repeats headers/footers
@@ -82,7 +89,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"site {args.site!r} is not enrolled or is disabled", file=sys.stderr)
         return 2
     data = json.loads(args.segments.read_text(encoding="utf-8"))
-    segments = [s for page in data["pages"] for s in page["segments"]]
+    segments = [
+        {**s, "path": page.get("path")} for page in data["pages"] for s in page["segments"]
+    ]
+    if site.path_rules and any(s["path"] is None for s in segments):
+        print(
+            f"site {site.site_id!r} has path rules, but the export has pages without a path: "
+            "re-export with 'page.html=/the/site/path' so each page is tiered correctly",
+            file=sys.stderr,
+        )
+        return 2
     report = prewarm(components.service, site, segments)
     print(report.summary())
     return 0

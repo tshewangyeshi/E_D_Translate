@@ -100,6 +100,54 @@ def create_app(
             },
         )
 
+    @app.options("/v1/config")
+    async def config_preflight(request: Request) -> Response:
+        origin = request.headers.get("origin")
+        if origin is None or not sites.origin_enrolled(origin):
+            return _error(403, "origin not enrolled")
+        return Response(
+            status_code=204,
+            headers={
+                **_cors(origin),
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
+                "Access-Control-Max-Age": "600",
+            },
+        )
+
+    @app.get("/v1/config")
+    async def config(request: Request, site: str = "") -> Response:
+        """Site configuration the widget needs before offering a toggle (FR-216).
+
+        Selectors only: the widget uses them to mark blocks stricter and to skip
+        private content. Path rules stay on the server, which is the only place
+        the effective tier is decided (FR-512).
+        """
+        origin = request.headers.get("origin")
+        enrolled = sites.allows(site, origin)
+        if enrolled is None or origin is None:
+            return _error(403, "origin not enrolled for this site")
+        if not origin_limiter.allow(origin):
+            return _error(
+                429,
+                "rate limit exceeded",
+                {**_cors(origin), "Retry-After": str(origin_limiter.retry_after_seconds())},
+            )
+        payload = {
+            "site": enrolled.site_id,
+            "default_tier": enrolled.default_tier,
+            "tier1_selectors": list(enrolled.tier1_selectors),
+            "private_selectors": list(enrolled.private_selectors),
+            "glossary_version": termbase_version,
+            "max_segments": MAX_SEGMENTS,
+        }
+        content = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        etag = '"' + hashlib.sha256(content).hexdigest()[:32] + '"'
+        headers = {**_cors(origin), "ETag": etag, "Cache-Control": "private, max-age=300"}
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        return Response(content, media_type="application/json", headers=headers)
+
     @app.post("/v1/translate")
     async def translate(request: Request) -> Response:
         raw = await request.body()
@@ -136,7 +184,7 @@ def create_app(
             )
 
         segments = [SegmentIn(s.id, s.text, body.tier, s.selector_tier) for s in body.segments]
-        results = await service.translate(site, hasher.hash(client), segments)
+        results = await service.translate(site, hasher.hash(client), segments, body.path)
 
         payload = {
             "model_version": service.translator.model_version,

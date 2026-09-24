@@ -137,13 +137,17 @@ class TranslateService:
     # -- public ---------------------------------------------------------------
 
     async def translate(
-        self, site: Site, client_hash: str, segments: list[SegmentIn]
+        self,
+        site: Site,
+        client_hash: str,
+        segments: list[SegmentIn],
+        path: object = None,
     ) -> list[SegmentOut]:
         out: dict[int, SegmentOut] = {}
         prepared: dict[int, _Prepared] = {}
         for n, seg_in in enumerate(segments):
             try:
-                prepared[n] = self._prepare(site, seg_in)
+                prepared[n] = self._prepare(site, seg_in, path)
             except SegmentError as err:
                 out[n] = self._fail(seg_in, None, Status.TAG_FALLBACK, err.cause)
 
@@ -178,9 +182,9 @@ class TranslateService:
 
     # -- steps ----------------------------------------------------------------
 
-    def prepare(self, site: Site, seg_in: SegmentIn) -> _Prepared:
+    def prepare(self, site: Site, seg_in: SegmentIn, path: object = None) -> _Prepared:
         """Parse, mask, apply the glossary, derive keys and tier. Raises SegmentError."""
-        return self._prepare(site, seg_in)
+        return self._prepare(site, seg_in, path)
 
     def job_for(self, site: Site, p: _Prepared, priority: int = PRIORITY_LIVE_DEFERRED) -> Job:
         """A queue job for a prepared segment. Masked text only (FR-143)."""
@@ -196,12 +200,12 @@ class TranslateService:
             priority=priority,
         )
 
-    def _prepare(self, site: Site, seg_in: SegmentIn) -> _Prepared:
+    def _prepare(self, site: Site, seg_in: SegmentIn, path: object = None) -> _Prepared:
         source = parse(seg_in.text)  # client input: entity tokens are rejected (S1.2)
         masked, entities = mask(source)
         with_terms, terms = substitute(masked, self.termbase)
         keys = keys_for(with_terms, fingerprint(terms.values()), self.versions)
-        tier = resolve_tier(site, seg_in.tier, seg_in.selector_tier)
+        tier = resolve_tier(site, seg_in.tier, seg_in.selector_tier, path)
         return _Prepared(seg_in, source, with_terms, entities, terms, keys, tier)
 
     def _finalise(self, p: _Prepared, model_output: Segment) -> Segment:
