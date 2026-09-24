@@ -1,0 +1,27 @@
+{
+  "_comment": "Local development sites (FR-601). Not deployment config: real enrolment lives in the operator's config store. Origins must match the browser's Origin header exactly.",
+  "sites": [
+    {
+      "site_id": "portal",
+      "origins": [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
+      ],
+      "default_tier": 2,
+      "tier1_selectors": [
+        ".legal-notice",
+        "#service-fees"
+      ],
+      "private_selectors": [
+        "[data-dz-private]"
+      ]
+    },
+    {
+      "site_id": "tier1-only",
+      "origins": [
+        "http://localhost:8081"
+      ],
+      "default_tier": 1
+    }
+  ]
+}
