@@ -57,7 +57,6 @@ STEPS: list[tuple[str, list[str], Path]] = [
 NOT_YET: list[tuple[str, str]] = [
     ("entity gate on real model output (NFR-201)", "needs WSO2 recordings (S0.1) and S10.2"),
     ("tag-integrity gate (NFR-200)", "arrives with S1.5 restoration, after the Sprint 0 go/no-go"),
-    ("widget size budget (FR-201)", "arrives with the S4.1 widget build"),
 ]
 
 
@@ -104,6 +103,11 @@ def main() -> int:
         steps += [
             ("tsc (widget types)", [npx, "tsc", "--noEmit", "-p", "tsconfig.json"], WIDGET),
             ("vitest (widget)", [npx, "vitest", "run"], WIDGET),
+            (
+                "widget build + size budget (FR-201)",
+                [shutil.which("node") or "node", "scripts/build.mjs"],
+                WIDGET,
+            ),
         ]
     except FileNotFoundError as err:
         steps.append(("widget", [str(err)], WIDGET))

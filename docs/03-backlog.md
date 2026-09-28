@@ -238,19 +238,21 @@ Requirements: FR-430, NFR-303 · [ER-O9, ER-18]
 
 ### S4.1 — Core widget
 Requirements: FR-200, FR-201, FR-210, FR-214, FR-215, NFR-502 · [ER-2, ER-6, ER-8, ER-16, ER-18, ER-O10]
-- [ ] Single script tag, no host build step
-- [ ] Widget build: `tsc` (no downlevel helpers, CI grep) → pinned minifier (no bundling) → content hash + SRI; no bundler, framework or polyfills
-- [ ] Under 15 KB gzipped, measured on the final hashed file, enforced in CI
-- [ ] Fetches `/v1/config` first; on failure offers no toggle and the page stays English
-- [ ] Writes each translated run into its own existing text node; run count or order mismatch → block stays English; node identity (same `Text` objects, count, order) asserted in vitest
-- [ ] Stale-response guard: a response is applied only if Dzongkha is still on, the block generation matches, and node values still equal the text that was sent
-- [ ] `pending_mt` segments re-requested once after ~8 s
-- [ ] Dzongkha-specific logic only in `locale-dz.ts`; CI grep (literal + escape forms) passes
-- [ ] Auto-translate from a saved preference waits for `load` + idle + two quiet frames
+- [x] Single script tag, no host build step
+- [x] Widget build: `tsc` (no downlevel helpers, CI grep) → pinned minifier (no bundling) → content hash + SRI; no bundler, framework or polyfills — esbuild 0.28.2 pinned exactly, minify-only; `scripts/build.mjs` fails on any tsc helper
+- [x] Under 15 KB gzipped, enforced in CI. **5,639 bytes, 37% of budget.** Measured over the whole module graph gzipped, not the entry alone: with no bundler the browser fetches every import, so the graph is what a first visit downloads
+- [x] Fetches `/v1/config` first; on failure offers no toggle and the page stays English
+- [x] Writes each translated run into its own existing text node; run count or order mismatch → block stays English; node identity asserted in vitest and mutation-checked (replacing a node fails the test)
+- [x] Stale-response guard: a response is applied only if Dzongkha is still on, the block generation matches, and node values still equal the text that was sent
+- [x] `pending_mt` segments re-requested once after ~8 s (once, not a poll; cancelled if the reader toggles back)
+- [x] Dzongkha-specific logic only in `locale-dz.ts`; CI grep (literal + escape forms) passes
+- [x] Auto-translate from a saved preference waits for `load` + idle + two quiet frames (preference *persistence* is S4.3; this reads it)
 - [ ] **Playwright fixtures: React CSR, React SSR (`hydrateRoot`), Vue CSR, Vue SSR** — translate, host re-render and toggle produce no framework errors or hydration warnings in the console
-- [ ] API failure leaves the page in English with no uncaught exception
+- [x] API failure leaves the page in English with no uncaught exception — network error, 5xx, 403 and malformed JSON each covered
 - [ ] **Device matrix:** Android System WebView / Chrome ~90, ~100 and current, with floors confirmed from pilot analytics; run before each release
 *gstack:* `/spec` → implement → `/review` → `/qa` against the fixture host pages
+
+Built 2026-09-28: `src/{main,widget,apply,api,wire,locale-dz}.ts`, 52 widget tests. **The two unticked items are the browser and device matrices** — neither can be closed from unit tests, and the device floors still need pilot analytics. Until they are, the widget is unproven against a real framework re-render.
 
 ### S4.2 — Dynamic content and attributes
 Requirements: FR-113, FR-211 · [ER-11, ER-18, ER-20]

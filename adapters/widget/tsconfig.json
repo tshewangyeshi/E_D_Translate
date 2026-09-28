@@ -3,7 +3,7 @@
     "target": "ES2018",
     "module": "ES2020",
     "moduleResolution": "Bundler",
-    "lib": ["ES2018", "DOM", "DOM.Iterable"],
+    "lib": ["ES2018", "ES2021.WeakRef", "DOM", "DOM.Iterable"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "importHelpers": false,
