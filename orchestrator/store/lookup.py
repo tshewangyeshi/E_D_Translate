@@ -191,3 +191,7 @@ class TranslationStore:
     def expire_machine(self, before: datetime) -> int:
         """Retention for unapproved machine translations (NFR-305)."""
         return self.tm.expire_machine(before)
+
+    def count_machine_before(self, before: datetime) -> int:
+        """Size of the next retention run, so an operator can look before leaping."""
+        return self.tm.count_machine_before(before)

@@ -18,6 +18,7 @@ only add matches and therefore only tighten the result.
 
 from __future__ import annotations
 
+import re
 from urllib.parse import unquote
 
 MAX_PATH_LENGTH = 512
@@ -71,6 +72,42 @@ def normalise_path(raw: object) -> str | None:
         out.append(segment)
 
     return "/" + "/".join(out).lower()
+
+
+#: A segment that identifies one person or one case rather than one page.
+#: Pure digits catch application and receipt numbers; the mixed rule catches
+#: reference codes like "APP-2026-0098" and opaque tokens. Deliberately eager:
+#: over-redacting costs a less specific log line, under-redacting writes a
+#: citizen identifier into storage.
+_IDENTIFIER = re.compile(
+    r"""^(?:
+        \d[\d\-_.]*                      # 11502001234, 2026-0098
+      | [A-Za-z0-9._~-]*\d[A-Za-z0-9._~-]*\d[A-Za-z0-9._~-]*  # two or more digits mixed in
+      | [0-9a-f]{8,}                     # hex token or hash
+      | [A-Za-z0-9_-]{20,}               # long opaque token
+    )$""",
+    re.VERBOSE,
+)
+
+
+def redact_path(path: object) -> str:
+    """The form of a path that may be stored or logged (NFR-304).
+
+    Identifying segments become ``:id``, so ``/application/11502001234`` is kept
+    as ``/application/:id``. The page is still distinguishable from other pages,
+    which is what an operator needs; the citizen is not, which is what the
+    citizen needs.
+
+    Separate from :func:`normalise_path` on purpose. Tier rules must match the
+    real path -- a rule on ``/legal/2026-budget`` has to see that segment -- so
+    redaction happens on the way OUT to storage and logs, never on the way in
+    to a policy decision.
+    """
+    normalised = normalise_path(path)
+    if normalised is None:
+        return "<unparseable>"
+    parts = [p for p in normalised.split("/") if p]
+    return "/" + "/".join(":id" if _IDENTIFIER.match(p) else p for p in parts)
 
 
 def path_matches(pattern: str, path: str) -> bool:

@@ -211,6 +211,14 @@ class PostgresTM:
                     rekeyed += 1
         return MigrationReport(rekeyed, rechecked)
 
+    def count_machine_before(self, before: datetime) -> int:
+        row = self.conn.execute(
+            "SELECT count(*) FROM translation_version"
+            " WHERE origin = 'mt' AND invalidated_at IS NULL AND created_at < %s",
+            (before,),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
     def expire_machine(self, before: datetime) -> int:
         cur = self.conn.execute(
             "UPDATE translation_version SET invalidated_at = now()"

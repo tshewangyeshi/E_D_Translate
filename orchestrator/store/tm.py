@@ -72,6 +72,8 @@ class TranslationMemory(Protocol):
 
     def expire_machine(self, before: datetime) -> int: ...
 
+    def count_machine_before(self, before: datetime) -> int: ...
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -235,7 +237,15 @@ class InMemoryTM:
         """Retention (NFR-305): invalidate machine translations created before ``before``."""
         count = 0
         for vid, v in list(self._versions.items()):
-            if v.origin is Origin.MT and v.invalidated_at is None and v.created_at < before:
+            if self._expirable(v, before):
                 self._versions[vid] = replace(v, invalidated_at=_now())
                 count += 1
         return count
+
+    def count_machine_before(self, before: datetime) -> int:
+        """What ``expire_machine`` would invalidate, without invalidating it."""
+        return sum(1 for v in self._versions.values() if self._expirable(v, before))
+
+    @staticmethod
+    def _expirable(v: TranslationVersion, before: datetime) -> bool:
+        return v.origin is Origin.MT and v.invalidated_at is None and v.created_at < before

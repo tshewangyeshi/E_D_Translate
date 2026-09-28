@@ -89,9 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"site {args.site!r} is not enrolled or is disabled", file=sys.stderr)
         return 2
     data = json.loads(args.segments.read_text(encoding="utf-8"))
-    segments = [
-        {**s, "path": page.get("path")} for page in data["pages"] for s in page["segments"]
-    ]
+    segments = [{**s, "path": page.get("path")} for page in data["pages"] for s in page["segments"]]
     if site.path_rules and any(s["path"] is None for s in segments):
         print(
             f"site {site.site_id!r} has path rules, but the export has pages without a path: "

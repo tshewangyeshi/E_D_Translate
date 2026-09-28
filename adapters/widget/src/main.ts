@@ -27,7 +27,24 @@ function control(label: string, onClick: () => void): HTMLButtonElement {
   return button;
 }
 
+/**
+ * A page the site has marked as carrying personal data (NFR-304).
+ *
+ * Checked on the document and the body, because a template that wraps every
+ * signed-in page usually owns one or the other. This is stronger than skipping
+ * regions: the widget does not load, does not offer a control, and never reads
+ * the page at all. A citizen's own application form should not be sampled by a
+ * translation service even to decide there is nothing to translate.
+ */
+function pageIsPrivate(): boolean {
+  return (
+    document.documentElement.hasAttribute("data-dz-private") ||
+    document.body?.hasAttribute("data-dz-private") === true
+  );
+}
+
 export async function boot(): Promise<Widget | null> {
+  if (pageIsPrivate()) return null;
   const script = ownScript();
   const site = script?.getAttribute("data-dz-site");
   if (!site) return null; // nothing to do without a site id

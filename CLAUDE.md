@@ -32,6 +32,7 @@ uvicorn orchestrator.main:create --factory                   # API
 python -m orchestrator.queue.run_worker                      # background worker
 python -m orchestrator.ops.prewarm --site portal segments.json   # after npm run build && node adapters/widget/scripts/export-segments.mjs page.html=/the/site/path
 python tools/demo.py                                             # the pipeline end to end, no Docker needed
+python -m orchestrator.ops.retention --days 90 --dry-run         # retention for unapproved machine output (NFR-305)
 ```
 
 - Python code: `orchestrator/` (pipeline in `orchestrator/pipeline/`, Dzongkha specifics only in `orchestrator/locale/dz.py`).

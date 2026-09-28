@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -25,8 +26,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from orchestrator.api.ratelimit import RateLimiter, client_bucket
+from orchestrator.governance.paths import redact_path
 from orchestrator.governance.sites import SiteRegistry
 from orchestrator.service.translate import SegmentIn, Status, TranslateService
+
+log = logging.getLogger(__name__)
 
 MAX_SEGMENTS = 64
 MAX_TEXT = 5000
@@ -206,6 +210,21 @@ def create_app(
         content = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         etag = '"' + hashlib.sha256(content).hexdigest()[:32] + '"'
         pending = any(r.status is Status.PENDING_MT for r in results)
+
+        # One line per request, carrying what an operator needs and nothing a
+        # citizen would mind: the page with identifying segments replaced by
+        # :id (NFR-304), counts by status, and no segment text or client
+        # address anywhere (NFR-303).
+        counts: dict[str, int] = {}
+        for result in results:
+            counts[result.status.value] = counts.get(result.status.value, 0) + 1
+        log.info(
+            "translate site=%s path=%s segments=%d %s",
+            site.site_id,
+            redact_path(body.path),
+            len(results),
+            " ".join(f"{name}={n}" for name, n in sorted(counts.items())),
+        )
         headers = {**cors, "ETag": etag}
         if pending:
             headers["Cache-Control"] = "no-store"

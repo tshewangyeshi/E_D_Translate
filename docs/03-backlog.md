@@ -217,12 +217,12 @@ Requirements: FR-620
 
 ### S3.4 — Personal-data controls
 Requirements: NFR-304, NFR-305, NFR-303 · [ER-O3]
-- [ ] Pilot enrols public, unauthenticated pages only
-- [ ] Widget loads nothing on pages marked `data-dz-private`; `data-dz-skip` and configured `private_selectors` regions are never extracted
-- [ ] Server normalises numeric and ID-like path segments to `:id` before storage
+- [ ] Pilot enrols public, unauthenticated pages only — **enrolment policy, not code.** `data-dz-private` is the technical backstop if a signed-in page is enrolled by mistake; it does not replace the enrolment decision
+- [x] Widget loads nothing on pages marked `data-dz-private` (checked on `<html>` and `<body>`; it does not even request configuration); `data-dz-skip` and configured `private_selectors` regions, and all their descendants and attributes, are never extracted
+- [x] Server normalises numeric and ID-like path segments to `:id` before storage or logging — `redact_path`, kept separate from the tier-matching normaliser because rules must match the real path. Deliberately eager: `/legal/2026-budget` redacts too, which costs a vaguer log line and never a leaked identifier
 - [ ] Tier 2 segments are neither persisted nor sent to MT until seen from ≥N distinct clients (proposed 3; salted, daily-rotated client hash); test: a one-off string never reaches the WSO2 mock
-- [ ] Unapproved machine translations expire after the retention period (proposed 90 days)
-- [ ] Logs contain `segment_key` hashes only, never segment text
+- [x] Unapproved machine translations expire after the retention period — `python -m orchestrator.ops.retention --days 90`, with `--dry-run` to see the blast radius first. Invalidates rather than deletes, because `translation_version` is immutable by trigger so what was served stays explicable. Residual: a row can still be served from the Redis cache until its own 7-day TTL runs out
+- [x] Logs contain keys, counts and the redacted path, never segment text or client address. One request log line, asserted by behaviour rather than by inspection: a test feeds person-shaped text through the live and the failing path and greps every emitted record. Mutation-checked — adding one logging call that includes segment text fails both
 *gstack:* `/cso` is a gate on this story.
 
 ### S3.5 — Minimal error-report intake
