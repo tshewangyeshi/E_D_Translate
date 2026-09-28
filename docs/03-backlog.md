@@ -247,12 +247,12 @@ Requirements: FR-200, FR-201, FR-210, FR-214, FR-215, NFR-502 · [ER-2, ER-6, ER
 - [x] `pending_mt` segments re-requested once after ~8 s (once, not a poll; cancelled if the reader toggles back)
 - [x] Dzongkha-specific logic only in `locale-dz.ts`; CI grep (literal + escape forms) passes
 - [x] Auto-translate from a saved preference waits for `load` + idle + two quiet frames (preference *persistence* is S4.3; this reads it)
-- [ ] **Playwright fixtures: React CSR, React SSR (`hydrateRoot`), Vue CSR, Vue SSR** — translate, host re-render and toggle produce no framework errors or hydration warnings in the console
+- [x] **Playwright fixtures: React CSR, React SSR (`hydrateRoot`), Vue CSR, Vue SSR** — translate, host re-render and toggle produce no framework errors or hydration warnings. The decisive assertion is that a host update to text the widget rewrote still reaches the page: a first version of these fixtures passed even with node replacement, because a framework updating a *single* text child just sets `textContent` on the parent. The fixture blocks now carry mixed content, which forces the framework to patch one specific `Text` node, and all four configurations fail if the widget replaces it
 - [x] API failure leaves the page in English with no uncaught exception — network error, 5xx, 403 and malformed JSON each covered
 - [ ] **Device matrix:** Android System WebView / Chrome ~90, ~100 and current, with floors confirmed from pilot analytics; run before each release
 *gstack:* `/spec` → implement → `/review` → `/qa` against the fixture host pages
 
-Built 2026-09-28: `src/{main,widget,apply,api,wire,locale-dz}.ts`, 52 widget tests. **The two unticked items are the browser and device matrices** — neither can be closed from unit tests, and the device floors still need pilot analytics. Until they are, the widget is unproven against a real framework re-render.
+Built 2026-09-28: `src/{main,widget,apply,api,wire,locale-dz}.ts`, 52 unit tests plus 10 browser tests. **The one unticked item is the device matrix** — it needs real hardware and floors confirmed from pilot analytics, so it cannot be closed here.
 
 ### S4.2 — Dynamic content and attributes
 Requirements: FR-113, FR-211 · [ER-11, ER-18, ER-20]

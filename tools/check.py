@@ -62,6 +62,17 @@ NOT_YET: list[tuple[str, str]] = [
 
 INTEGRATION_PORTS = {"PostgreSQL": 55432, "Redis": 56379}  # docker-compose.yml
 
+# Playwright keeps its browsers outside the repo; without them the browser
+# fixtures cannot run and say so rather than being silently skipped.
+BROWSERS = Path.home() / "AppData" / "Local" / "ms-playwright"
+
+
+def browsers_available() -> bool:
+    if BROWSERS.is_dir() and any(BROWSERS.glob("chromium*")):
+        return True
+    cache = Path.home() / ".cache" / "ms-playwright"  # Linux/macOS
+    return cache.is_dir() and any(cache.glob("chromium*"))
+
 
 def services_up() -> dict[str, bool]:
     up = {}
@@ -109,6 +120,14 @@ def main() -> int:
                 WIDGET,
             ),
         ]
+        if browsers_available():
+            steps.append(
+                (
+                    "browser fixtures: React/Vue x CSR/SSR (S4.1)",
+                    [npx, "playwright", "test"],
+                    WIDGET,
+                )
+            )
     except FileNotFoundError as err:
         steps.append(("widget", [str(err)], WIDGET))
     results = [(name, run(name, cmd, cwd)) for name, cmd, cwd in steps]
@@ -118,6 +137,11 @@ def main() -> int:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
     for name, why in NOT_YET:
         print(f"  TODO  {name}: {why}")
+    if not browsers_available():
+        print(
+            "  NOT RUN  browser fixtures (S4.1): Playwright browsers not installed "
+            "(cd adapters/widget && npx playwright install chromium)"
+        )
     missing = [n for n, ok in up.items() if not ok]
     if missing:
         print(
