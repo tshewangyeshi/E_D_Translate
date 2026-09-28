@@ -121,13 +121,21 @@ def main() -> int:
             ),
         ]
         if browsers_available():
-            steps.append(
+            steps += [
                 (
                     "browser fixtures: React/Vue x CSR/SSR (S4.1)",
-                    [npx, "playwright", "test"],
+                    [npx, "playwright", "test", "--project=fixtures"],
                     WIDGET,
-                )
-            )
+                ),
+                # Alone, one worker. Sharing the machine with the other browser
+                # tests measures CPU contention and reports it as widget cost:
+                # the same page measured 85 ms and 145 ms on consecutive runs.
+                (
+                    "widget performance, CPU 6x (S4.2)",
+                    [npx, "playwright", "test", "--project=perf", "--workers=1"],
+                    WIDGET,
+                ),
+            ]
     except FileNotFoundError as err:
         steps.append(("widget", [str(err)], WIDGET))
     results = [(name, run(name, cmd, cwd)) for name, cmd, cwd in steps]

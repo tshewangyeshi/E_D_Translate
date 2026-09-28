@@ -59,6 +59,28 @@ function makeRef<T extends object>(value: T): Ref<T> {
   return typeof WeakRef === "function" ? new WeakRef(value) : { deref: () => value };
 }
 
+/** Blocks this far outside the viewport are treated as about to be read. */
+const VIEWPORT_MARGIN_PX = 300;
+
+/** Segments per chunk before the widget hands the main thread back. */
+const YIELD_EVERY = 8;
+
+/**
+ * Hand control back to the browser.
+ *
+ * Extraction and writing are synchronous DOM work. Done in one run over a long
+ * page they hold the main thread long enough for a tap to feel dead, which on
+ * a low-end Android phone is the difference between a usable page and a broken
+ * one. `scheduler.yield` keeps our place in the queue where it exists; the
+ * timeout fallback goes to the back of it, which is slower but never worse than
+ * not yielding.
+ */
+function yieldToBrowser(win: Window): Promise<void> {
+  const scheduler = (win as unknown as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  if (typeof scheduler?.yield === "function") return scheduler.yield();
+  return new Promise((resolve) => win.setTimeout(resolve, 0));
+}
+
 /** How long to wait before asking again for segments the server queued. */
 const PENDING_RETRY_MS = 8_000;
 
@@ -78,10 +100,13 @@ export class Widget {
   private readonly attributes = new WeakMap<Element, Map<string, AttributeState>>();
   private translatedAttributes: Ref<Element>[] = [];
   private watching: Observation | null = null;
+  private viewportObserver: IntersectionObserver | null = null;
 
   constructor(
     private readonly api: ApiOptions,
     private readonly root: () => Element,
+    /** Injectable so tests can supply a window without layout or observers. */
+    private readonly window: () => Window & typeof globalThis = () => globalThis.window,
   ) {}
 
   /** Load configuration. False means: offer no toggle (FR-216). */
@@ -145,8 +170,66 @@ export class Widget {
     this.translatedAttributes = [];
   }
 
+  /**
+   * Split a full-page extraction into what the reader can see and what they
+   * cannot (ER-20).
+   *
+   * Only the visible part is translated now; the rest waits until it is
+   * scrolled towards. On a long page this is the difference between one large
+   * request that blocks the first screen and a small one that does not.
+   *
+   * Where there is no `IntersectionObserver` -- jsdom, and any engine below the
+   * supported floor -- nothing is deferred. Everything is translated as before,
+   * which is slower on a long page and never wrong.
+   */
+  private partition(segments: Segment[]): { now: Segment[]; later: Segment[] } {
+    const win = this.window();
+    if (typeof win.IntersectionObserver !== "function" || segments.length <= YIELD_EVERY) {
+      return { now: segments, later: [] };
+    }
+    const height = win.innerHeight || 0;
+    if (height === 0) return { now: segments, later: [] }; // no layout to reason about
+    const now: Segment[] = [];
+    const later: Segment[] = [];
+    for (const segment of segments) {
+      const rect = segment.block.getBoundingClientRect();
+      const visible = rect.bottom > -VIEWPORT_MARGIN_PX && rect.top < height + VIEWPORT_MARGIN_PX;
+      (visible ? now : later).push(segment);
+    }
+    return { now, later };
+  }
+
+  /** Translate a deferred block once the reader scrolls towards it. */
+  private deferToViewport(segments: readonly Segment[], epoch: number): void {
+    if (segments.length === 0) return;
+    const win = this.window();
+    const observer = (this.viewportObserver ??= new win.IntersectionObserver(
+      (entries: IntersectionObserverEntry[]) => {
+        const arrived: Element[] = [];
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          this.viewportObserver?.unobserve(entry.target);
+          arrived.push(entry.target);
+        }
+        if (arrived.length === 0) return;
+        if (this.epoch !== epoch || this.showing !== "dz") return;
+        void this.pass(this.epoch, true, arrived);
+      },
+      { rootMargin: `${VIEWPORT_MARGIN_PX}px` },
+    ));
+    for (const segment of segments) observer.observe(segment.block);
+  }
+
   private async pass(epoch: number, retry = false, roots?: readonly Element[]): Promise<void> {
-    const { segments, attributes } = this.extractUnits(roots);
+    const extracted = this.extractUnits(roots);
+    const attributes = extracted.attributes;
+    // Only a full-page pass defers: a targeted one was asked for explicitly.
+    const { now, later } =
+      roots === undefined
+        ? this.partition(extracted.segments)
+        : { now: extracted.segments, later: [] };
+    this.deferToViewport(later, epoch);
+    const segments = now;
     if (segments.length === 0 && attributes.length === 0) return;
 
     const sent = new Map<string, { segment: Segment; slots: string[]; generation: number }>();
@@ -172,6 +255,7 @@ export class Widget {
     });
 
     const pending: string[] = [];
+    let written = 0;
     for (let start = 0; start < items.length; start += MAX_SEGMENTS) {
       const batch = items.slice(start, start + MAX_SEGMENTS);
       const results = await translateBatch(this.api, location.pathname, batch);
@@ -186,6 +270,10 @@ export class Widget {
         const record = sent.get(id);
         if (record === undefined) continue;
         this.write(record, epoch, result.text, result.origin);
+        // Writing is synchronous DOM work. Yielding every few blocks keeps any
+        // single task short enough that a tap still feels immediate (ER-20).
+        written += 1;
+        if (written % YIELD_EVERY === 0) await yieldToBrowser(this.window());
       }
     }
 
@@ -279,12 +367,18 @@ export class Widget {
       node.nodeType === 1 ? (node as Element) : (node.parentElement ?? null);
     if (element === null || !element.isConnected) return null;
     if (element.closest("[data-dz-control]") !== null) return null; // our own UI
-    // A known block wins; otherwise the element itself is the unit and
-    // extraction will find the real block inside it.
-    for (let at: Element | null = element; at !== null; at = at.parentElement) {
+    // A known block wins, so a change lands on the unit we already track.
+    //
+    // The walk stops before the root. Reaching the root would return it as
+    // "the block that changed", and re-extracting from the root pulls in the
+    // entire page: one unrelated character changing in a footer would
+    // re-translate every paragraph on the page. Observed doing exactly that
+    // against a 600-block page with a ticking counter.
+    const root = this.root();
+    for (let at: Element | null = element; at !== null && at !== root; at = at.parentElement) {
       if (this.registry.has(at)) return at;
     }
-    return element;
+    return element === root ? null : element;
   }
 
   /** True when this node still holds exactly what the widget last wrote to it. */

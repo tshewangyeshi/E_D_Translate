@@ -9,7 +9,8 @@
     "test": "vitest run",
     "build": "node scripts/build.mjs",
     "export-segments": "node scripts/export-segments.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --project=fixtures",
+    "test:perf": "playwright test --project=perf --workers=1"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

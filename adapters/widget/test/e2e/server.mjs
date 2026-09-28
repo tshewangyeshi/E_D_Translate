@@ -136,6 +136,35 @@ export async function start(port = 0) {
       return serveBundle(res, name);
     }
 
+    if (path === "/perf") {
+      // A long, framework-free page: 3,000 nodes and a counter ticking every
+      // 250 ms, so the main thread is never idle. No framework, so whatever the
+      // measurements show is the widget's cost and not React's.
+      const blocks = Array.from(
+        { length: 600 },
+        (_, n) =>
+          `<p>Section ${n}: apply to renew your passport online, ` +
+          `fee <b>Nu. ${1000 + n}</b>, processed within 14 days.</p>`,
+      ).join("");
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>perf</title></head>
+<body>
+<div id="app">${blocks}</div>
+<script>
+  // Keeps the page busy the way a real one is, so the widget is never
+  // measured on an otherwise empty main thread.
+  let tick = 0;
+  const counter = document.createElement("span");
+  counter.id = "tick";
+  document.body.appendChild(counter);
+  setInterval(() => { counter.textContent = "tick " + (++tick); }, 250);
+</script>
+<script type="module" src="/widget/main.js" data-dz-site="portal" data-dz-api=""></script>
+</body></html>`);
+      return;
+    }
+
     const match = /^\/(react|vue)-(csr|ssr)$/.exec(path);
     if (match) {
       const [, framework, mode] = match;

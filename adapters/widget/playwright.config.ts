@@ -20,5 +20,24 @@ export default defineConfig({
     trace: "retain-on-failure",
     // No baseURL: the fixture server picks a free port per run.
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // Two projects because the performance measurements are only meaningful
+  // with the machine to themselves. Run in parallel with fifteen other
+  // browsers, the same page measured 85 ms and 145 ms on consecutive runs --
+  // that is CPU contention being reported as widget cost. The `perf` project
+  // is run separately with a single worker:
+  //
+  //   npm run test:e2e        fixtures, parallel
+  //   npm run test:perf       performance, alone
+  projects: [
+    {
+      name: "fixtures",
+      testIgnore: "**/perf.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "perf",
+      testMatch: "**/perf.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
 });

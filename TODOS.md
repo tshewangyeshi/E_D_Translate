@@ -56,4 +56,16 @@ The 2026-09-28 security audit closed the two limiter defects behind this one (LR
 **Priority:** P1
 **Depends on:** WSO2/deployment topology
 
+### Chunk widget extraction at block boundaries
+
+**What:** Split `extract()` so a long page is walked in pieces with the main thread handed back between them, instead of one synchronous pass.
+
+**Why:** ER-20 budgets no widget long task over 50 ms. Measured on a 600-block page with the CPU throttled 6x, the worst task is ~77-93 ms and a single `extract()` over the whole page accounts for ~68 ms of it. Yielding between writes cannot help: the cost is paid before the first write. On the low-end Android hardware this service targets, that window is felt as a dead tap.
+
+**Context:** `adapters/widget/test/e2e/perf.spec.ts` measures it and currently asserts regression guards (130 ms / 160 ms) that sit ABOVE the ER-20 targets, with the gap written into the test. Tighten them to 50 ms and 100 ms when this lands. The work is in `adapters/widget/src/extract.ts`: chunk roots must stop descending at block boundaries, or an inline element becomes its own block and the placeholder model breaks.
+
+**Effort:** M
+**Priority:** P2 (before the pilot on low-end devices; not before a desktop demo)
+**Depends on:** None
+
 ## Completed
