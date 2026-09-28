@@ -35,6 +35,7 @@ from orchestrator.store.cache import (
 from orchestrator.store.lookup import TranslationStore
 from orchestrator.store.migrate import migrate
 from orchestrator.store.postgres_tm import PostgresTM
+from orchestrator.store.reports import PostgresReportStore, ReportStore
 from orchestrator.upstream.quota import QuotaManager
 from orchestrator.upstream.translator import MockTranslator, Translator
 
@@ -98,6 +99,7 @@ def build_translator(settings: Settings, fmt: ModelFormat) -> Translator:
 class Components:
     service: TranslateService
     store: TranslationStore
+    reports: ReportStore
     queue: PostgresJobQueue
     translator: Translator
     fmt: ModelFormat
@@ -134,4 +136,15 @@ def build(settings: Settings) -> Components:
         quota=quota,
         pipeline_version=pipeline_version(),
     )
-    return Components(service, store, queue, translator, fmt, quota, sites, termbase, conn)
+    return Components(
+        service,
+        store,
+        PostgresReportStore(conn),
+        queue,
+        translator,
+        fmt,
+        quota,
+        sites,
+        termbase,
+        conn,
+    )

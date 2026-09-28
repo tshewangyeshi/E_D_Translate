@@ -169,8 +169,20 @@ def test_fr142_model_converting_an_entity_to_tibetan_digits_is_refused() -> None
 # --- properties ---
 
 _pool = st.sampled_from(
-    ["Nu. 500", "Nu. 1,500", "BTN 2500.50", "30 June 2026", "2026-06-30", "00012345678",
-     "MoXX/DEMO/2026/123", "90000001", "12.5%", "help@portal.gov.example", "1500", "7"]
+    [
+        "Nu. 500",
+        "Nu. 1,500",
+        "BTN 2500.50",
+        "30 June 2026",
+        "2026-06-30",
+        "00012345678",
+        "MoXX/DEMO/2026/123",
+        "90000001",
+        "12.5%",
+        "help@portal.gov.example",
+        "1500",
+        "7",
+    ]
 )
 _words = st.sampled_from(
     ["Pay", "the", "fee", "by", "at", "counter", "apply", "before", "online", "and"]

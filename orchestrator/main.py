@@ -10,4 +10,9 @@ from orchestrator.wiring import Settings, build
 
 def create() -> FastAPI:
     c = build(Settings.from_env())
-    return create_app(service=c.service, sites=c.sites, termbase_version=c.termbase.version)
+    return create_app(
+        service=c.service,
+        sites=c.sites,
+        termbase_version=c.termbase.version,
+        reports=c.reports,
+    )
