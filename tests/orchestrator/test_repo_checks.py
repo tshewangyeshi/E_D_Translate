@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from orchestrator.locale import dz
-from tools import check_invisible, check_locale, check_req_ids
+from tools import check_invisible, check_locale, check_req_ids, check_requirements
 
 # Sample IDs are assembled at runtime so the repo-wide ID scan does not see them here.
 _FR = "FR" + "-"
@@ -95,3 +95,64 @@ def test_fr160_escaped_invisible_characters_are_fine(tmp_path: Path) -> None:
 
 def test_fr160_current_repo_has_no_invisible_characters() -> None:
     assert check_invisible.violations() == []
+
+
+# --- dependency pins: requirements.txt must not drift from pyproject.toml ---
+
+
+def test_pins_accept_a_well_formed_file() -> None:
+    pins, errors = check_requirements.read_pins("# a comment\n\nfastapi==0.141.1\nredis==8.1.0\n")
+    assert errors == []
+    assert pins == {"fastapi": "0.141.1", "redis": "8.1.0"}
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "ruff>=0.6",  # a range says what is permitted, not what is installed
+        "fastapi",  # unpinned
+        "-r other.txt",  # include
+        "--index-url https://example.invalid/simple",  # index option
+        "-e .",  # editable
+        "pkg @ https://example.invalid/pkg.whl",  # direct URL
+    ],
+)
+def test_pins_reject_anything_that_is_not_an_exact_pin(line: str) -> None:
+    _, errors = check_requirements.read_pins(line + "\n")
+    assert errors, line
+
+
+def test_pins_reject_a_duplicate_package() -> None:
+    _, errors = check_requirements.read_pins("pytest==9.1.1\npytest==9.0.0\n")
+    assert any("pinned again" in e for e in errors)
+
+
+def test_pins_normalise_package_names_per_pep503() -> None:
+    """Types-Redis, types_redis and types.redis are one package, not three."""
+    pins, errors = check_requirements.read_pins("Types-Redis==1.0\ntypes_redis==1.0\n")
+    assert errors and pins == {"types-redis": "1.0"}
+
+
+def test_pins_catch_a_dependency_declared_but_never_pinned() -> None:
+    errors = check_requirements.check_declared({"fastapi": "0.141.1"}, declared=["redis>=5.0"])
+    assert any("missing from requirements.txt" in e for e in errors)
+
+
+def test_pins_catch_a_pin_that_violates_the_declared_range() -> None:
+    errors = check_requirements.check_declared({"fastapi": "0.99.0"}, declared=["fastapi>=0.115"])
+    assert any("does not satisfy" in e for e in errors)
+
+
+def test_pins_accept_a_pin_inside_the_declared_range() -> None:
+    assert (
+        check_requirements.check_declared({"fastapi": "0.141.1"}, declared=["fastapi>=0.115"]) == []
+    )
+
+
+def test_pins_in_the_current_repo_match_pyproject_and_the_environment() -> None:
+    pins, errors = check_requirements.read_pins(
+        check_requirements.REQUIREMENTS.read_text(encoding="utf-8")
+    )
+    assert errors == []
+    assert check_requirements.check_declared(pins) == []
+    assert check_requirements.check_environment(pins) == []

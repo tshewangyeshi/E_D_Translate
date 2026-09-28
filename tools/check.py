@@ -31,6 +31,7 @@ STEPS: list[tuple[str, list[str], Path]] = [
     ("ruff (lint)", [PY, "-m", "ruff", "check", "orchestrator", "tools", "tests"], ROOT),
     ("mypy (types)", [PY, "-m", "mypy"], ROOT),
     ("requirement IDs (S0.3)", [PY, "tools/check_req_ids.py"], ROOT),
+    ("dependency pins", [PY, "tools/check_requirements.py"], ROOT),
     ("locale isolation (NFR-500)", [PY, "tools/check_locale.py"], ROOT),
     ("invisible characters", [PY, "tools/check_invisible.py"], ROOT),
     ("pipeline change guard", [PY, "tools/check_pipeline_guard.py"], ROOT),

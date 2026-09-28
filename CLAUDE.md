@@ -18,6 +18,10 @@ docker compose up -d           # throwaway PostgreSQL (55432) + Redis (56379) fo
 python tools/check.py          # = make check; CI adds --require-integration
 ```
 
+`pyproject.toml` is authoritative for dependencies; `requirements.txt` pins the
+installed closure for tools that cannot read PEP 621 metadata. After changing a
+dependency, regenerate it (the command is in its header) or `make check` fails.
+
 Run locally (fake translator; configuration in `orchestrator/wiring.py`):
 
 ```bash
