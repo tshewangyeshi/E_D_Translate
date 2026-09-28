@@ -28,6 +28,8 @@ export interface SegmentResult {
   text: string;
   status: SegmentStatus;
   origin?: string;
+  /** Hash of the masked source, for reporting an error against it (FR-104). */
+  segmentKey?: string;
 }
 
 export interface ApiOptions {
@@ -119,6 +121,7 @@ export async function translateBatch(
       text: raw["text"],
       status: (raw["status"] as SegmentStatus) ?? "tag_fallback",
       ...(typeof raw["origin"] === "string" ? { origin: raw["origin"] } : {}),
+      ...(typeof raw["segment_key"] === "string" ? { segmentKey: raw["segment_key"] } : {}),
     });
   }
   return out;
@@ -126,4 +129,40 @@ export async function translateBatch(
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+/**
+ * Report a translation error (FR-430).
+ *
+ * Resolves true when the server accepted the request, which is NOT the same as
+ * the report being kept: 202 is returned whether it was stored, rate-limited,
+ * saturated or dropped as a honeypot hit, deliberately. The widget cannot know
+ * which, and must not pretend otherwise.
+ *
+ * It does not go through `request`, which parses JSON: a 202 has no body, so
+ * parsing would throw and a successful report would look like a failure.
+ */
+export async function sendFeedback(
+  options: ApiOptions,
+  segmentKey: string,
+  reason: string,
+  comment: string,
+): Promise<boolean> {
+  const doFetch = options.fetchImpl ?? globalThis.fetch;
+  if (typeof doFetch !== "function") return false;
+  try {
+    const response = await doFetch(`${options.base}/v1/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        site: options.site,
+        segment_key: segmentKey,
+        reason,
+        ...(comment ? { comment } : {}),
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false; // network failure: the reader is thanked either way
+  }
 }

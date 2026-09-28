@@ -8,6 +8,8 @@
 // fails to load (FR-215).
 
 import { LABEL_SWITCH_TO_DZ, LABEL_SWITCH_TO_EN } from "./locale-dz.js";
+import { sendFeedback } from "./api.js";
+import { Notice } from "./notice.js";
 import { Widget, savePreference, savedPreference, whenQuiet } from "./widget.js";
 
 /** The script element that loaded this module, for its data- attributes. */
@@ -50,7 +52,12 @@ export async function boot(): Promise<Widget | null> {
   if (!site) return null; // nothing to do without a site id
 
   const base = script?.getAttribute("data-dz-api") ?? new URL(".", import.meta.url).origin;
-  const widget = new Widget({ base, site }, () => document.body);
+  const api = { base, site };
+  const widget = new Widget(api, () => document.body);
+  const notice = new Notice({
+    send: (key, reason, comment) => sendFeedback(api, key, reason, comment),
+    keyFor: (block) => widget.segmentKeyFor(block),
+  });
 
   // Configuration first: without it the widget cannot tell Tier 1 or private
   // regions apart, so it offers no control at all (FR-216).
@@ -61,10 +68,14 @@ export async function boot(): Promise<Widget | null> {
       if (widget.language === "en") {
         savePreference("dz");
         await widget.translate();
+        // The notice appears only once machine output is actually on the
+        // page: an approved translation needs no warning (FR-520).
+        if (widget.showingMachineOutput) notice.show();
         button.textContent = LABEL_SWITCH_TO_EN;
       } else {
         savePreference("en");
         widget.toggleBack();
+        notice.hide();
         button.textContent = LABEL_SWITCH_TO_DZ;
       }
     })();
@@ -81,6 +92,7 @@ export async function boot(): Promise<Widget | null> {
     // the first write cannot race a framework's hydration pass (ER-16).
     whenQuiet(() => {
       void widget.translate().then(() => {
+        if (widget.showingMachineOutput) notice.show();
         button.textContent = LABEL_SWITCH_TO_EN;
       });
     });

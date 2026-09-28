@@ -204,10 +204,10 @@ Pre-warm now carries each snapshot's page path (`export-segments.mjs page.html=/
 
 ### S3.2 — Machine-translation labelling
 Requirements: FR-520, FR-521, FR-522 · [ER-O9]
-- [ ] Persistent bilingual notice on any page carrying machine output
-- [ ] Notice is not dismissable in a way that persists across pages
-- [ ] `lang="dz-x-mtfrom-en"` on machine output, `lang="dz"` on approved output
-- [ ] Notice carries a working report-an-error affordance, backed by S3.5
+- [x] Persistent bilingual notice on any page carrying machine output. Bilingual because a reader who cannot judge the Dzongkha is exactly the reader who most needs the warning, and a reader who reads only Dzongkha needs it too; each half carries its own `lang`, and the notice is `role=status aria-live=polite` so it never interrupts a screen reader mid-sentence. It appears only when machine output is actually present — approved text needs no warning
+- [x] Notice is not dismissable in a way that persists across pages. `Hide` collapses it for this page view and stores nothing: a reader who dismissed it on the homepage last month has not thereby been told about the page they are reading today. Mutation-checked — persisting the dismissal in `localStorage` fails the test
+- [x] `lang="dz-x-mtfrom-en"` on machine output, `lang="dz"` on approved output (delivered in S4.1)
+- [x] Notice carries a working report-an-error affordance, backed by S3.5. The reader taps 'report an error', then taps the wrong text; the click is captured so reporting an error on a link does not also follow it. Reasons mirror the server's closed list, asserted by test so the two cannot drift. The reader is thanked identically whatever the server did, because 202 deliberately does not say whether the report was kept
 *gstack:* `/plan-design-review` before implementing — this is user-facing and easy to make ugly or ignorable.
 
 ### S3.3 — Audit trail

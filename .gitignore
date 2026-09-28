@@ -31,3 +31,5 @@ __pycache__/
 adapters/widget/dist/
 adapters/widget/test-results/
 adapters/widget/playwright-report/
+
+.gstack/
