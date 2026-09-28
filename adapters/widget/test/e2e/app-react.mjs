@@ -19,6 +19,8 @@ export function tree(h, content, counter = 0, intro = content.intro, extra = [])
       " today.",
     ]),
     h("p", { key: "f" }, content.fee),
+    // An attribute surface, so alt text is exercised in a real browser too.
+    h("img", { key: "m", id: "photo", src: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", alt: content.alt }),
     h("p", { key: "l", className: "legal" }, content.legal),
     h("p", { key: "c", id: "counter" }, `Counter: ${counter}`),
     // Blocks the host adds after load, the S4.2 case.

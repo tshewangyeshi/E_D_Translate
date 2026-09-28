@@ -19,6 +19,7 @@ export function options(h, content) {
           " today.",
         ]),
         h("p", null, this.fee),
+        h("img", { id: "photo", src: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", alt: this.alt }),
         h("p", { class: "legal" }, this.legal),
         h("p", { id: "counter" }, `Counter: ${this.counter}`),
         ...this.extra.map((text) => h("p", { class: "added" }, text)),

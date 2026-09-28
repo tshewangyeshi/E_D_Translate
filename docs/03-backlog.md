@@ -272,8 +272,8 @@ Requirements: FR-212, FR-213 · [ER-11, ER-19]
 
 ### S4.4 — Host-page safety
 Requirements: FR-210, NFR-300, NFR-401 · [ER-18]
-- [ ] Translated text is inserted as text (`nodeValue` / `setAttribute`), never parsed as HTML
-- [ ] A fixture page with a script-bearing translation response is not executed
+- [x] Translated text is inserted as text (`nodeValue` / `setAttribute`), never parsed as HTML. Structural, not filtered: no sanitiser is involved and none should be, because a sanitiser can be bypassed and `nodeValue` is not parsed
+- [x] A fixture page with a script-bearing translation response is not executed — six payloads (`<script>`, `<img onerror>`, `<svg onload>`, quote-break-out, `javascript:` iframe, tag-break-out) plus a hostile `alt` value. Each asserts the payload did not run, created no element, and is present as literal text. Mutation-checked: switching the writer to `innerHTML` fails all eight
 - [ ] axe-core via Playwright on the four fixture hosts: **zero new violations** vs. the widget-absent baseline
 *gstack:* `/cso` on this story specifically.
 

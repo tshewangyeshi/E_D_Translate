@@ -4,4 +4,5 @@ export const CONTENT = {
   intro: "Apply to renew your passport online.",
   fee: "The renewal fee is Nu. 1,200.",
   legal: "Fees are non-refundable.",
+  alt: "A passport photograph",
 };
