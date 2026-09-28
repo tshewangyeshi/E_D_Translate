@@ -50,6 +50,8 @@
 
 **Context:** `orchestrator/api/app.py` uses `request.client.host`. Needs the deployment topology (FR-600) to know which proxies to trust. Must be tested with spoofed headers from untrusted peers.
 
+The 2026-09-28 security audit closed the two limiter defects behind this one (LRU eviction so a penalty survives memory pressure; IPv6 folded to its /64 so a new bucket costs an allocation rather than an address). Neither helps while every request carries the proxy's address, so this remains the blocking item: it decides what the client key means before any limiting applies. Whatever resolves the address must feed `client_bucket` so the /64 rule applies to the real peer.
+
 **Effort:** S
 **Priority:** P1
 **Depends on:** WSO2/deployment topology

@@ -24,7 +24,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
-from orchestrator.api.ratelimit import RateLimiter
+from orchestrator.api.ratelimit import RateLimiter, client_bucket
 from orchestrator.governance.sites import SiteRegistry
 from orchestrator.service.translate import SegmentIn, Status, TranslateService
 
@@ -175,7 +175,10 @@ def create_app(
         if site is None or origin is None:
             return _error(403, "origin not enrolled for this site")
         cors = _cors(origin)
-        client = request.client.host if request.client else "unknown"
+        # One IPv6 allocation is one client, for both the rate limit and the
+        # distinct-client gate below: otherwise a new address buys a fresh burst
+        # and counts as another citizen who has seen the text (NFR-304).
+        client = client_bucket(request.client.host if request.client else "unknown")
         if not origin_limiter.allow(origin) or not client_limiter.allow(f"{origin}|{client}"):
             return _error(
                 429,
