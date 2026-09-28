@@ -25,6 +25,8 @@ export interface BlockState {
   generation: number;
   /** True while Dzongkha is displayed in this block. */
   translated: boolean;
+  /** Hash of the masked source, so a reader can report this block (FR-430). */
+  segmentKey?: string;
 }
 
 /** Per-block state, weakly held so a removed block is collectable (spec ER-19). */

@@ -204,10 +204,10 @@ Pre-warm now carries each snapshot's page path (`export-segments.mjs page.html=/
 
 ### S3.2 — Machine-translation labelling
 Requirements: FR-520, FR-521, FR-522 · [ER-O9]
-- [ ] Persistent bilingual notice on any page carrying machine output
-- [ ] Notice is not dismissable in a way that persists across pages
-- [ ] `lang="dz-x-mtfrom-en"` on machine output, `lang="dz"` on approved output
-- [ ] Notice carries a working report-an-error affordance, backed by S3.5
+- [x] Persistent bilingual notice on any page carrying machine output. Bilingual because a reader who cannot judge the Dzongkha is exactly the reader who most needs the warning, and a reader who reads only Dzongkha needs it too; each half carries its own `lang`, and the notice is `role=status aria-live=polite` so it never interrupts a screen reader mid-sentence. It appears only when machine output is actually present — approved text needs no warning
+- [x] Notice is not dismissable in a way that persists across pages. `Hide` collapses it for this page view and stores nothing: a reader who dismissed it on the homepage last month has not thereby been told about the page they are reading today. Mutation-checked — persisting the dismissal in `localStorage` fails the test
+- [x] `lang="dz-x-mtfrom-en"` on machine output, `lang="dz"` on approved output (delivered in S4.1)
+- [x] Notice carries a working report-an-error affordance, backed by S3.5. The reader taps 'report an error', then taps the wrong text; the click is captured so reporting an error on a link does not also follow it. Reasons mirror the server's closed list, asserted by test so the two cannot drift. The reader is thanked identically whatever the server did, because 202 deliberately does not say whether the report was kept
 *gstack:* `/plan-design-review` before implementing — this is user-facing and easy to make ugly or ignorable.
 
 ### S3.3 — Audit trail
@@ -227,10 +227,10 @@ Requirements: NFR-304, NFR-305, NFR-303 · [ER-O3]
 
 ### S3.5 — Minimal error-report intake
 Requirements: FR-430, NFR-303 · [ER-O9, ER-18]
-- [ ] `/v1/feedback` stores reports against `segment_key` (returned by `/v1/translate`)
-- [ ] Rate limits: 10 reports/hour per client hash, 100/day per segment; honeypot field; limited or honeypot requests get 202 and are silently dropped (tested)
-- [ ] No reporter identifier stored
-- [ ] Triage and approval workflow stays in E7 (S7.2)
+- [x] `/v1/feedback` stores reports against `segment_key`, with a closed list of reasons and an optional capped comment. Free-form fields invite personal detail we would then be storing, so the reason list is closed and the comment is length-limited and refused rather than truncated
+- [x] Rate limits: 10/hour per client hash (burst 10, so a reader who spots several bad segments on one page can report them together), 100/day per segment; honeypot named `website` because a field called `honeypot` is one a bot skips. **Stored, rate-limited, saturated and honeypot are one identical 202** — distinguishable outcomes would turn the endpoint into an oracle for mapping saturated segments or tuning against the limiter. Mutation-checked: making the limited case answer 429 fails three tests
+- [x] No reporter identifier stored. The client hash decides whether to accept and is never written down; the stored record is asserted field-by-field to be exactly `segment_key`, `site_id`, `reason`, `comment`. Mutation-checked: adding a `client_hash` field fails
+- [x] Triage and approval workflow stays in E7 (S7.2) — this is an inbox, with a `triaged_at` column and an untriaged-per-site index for S7.2 to use, and no workflow of its own
 
 ---
 

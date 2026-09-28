@@ -29,6 +29,13 @@ from orchestrator.api.ratelimit import RateLimiter, client_bucket
 from orchestrator.governance.paths import redact_path
 from orchestrator.governance.sites import SiteRegistry
 from orchestrator.service.translate import SegmentIn, Status, TranslateService
+from orchestrator.store.reports import (
+    MAX_COMMENT_CHARS,
+    REASONS,
+    ErrorReport,
+    ReportStore,
+    segment_is_saturated,
+)
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +48,21 @@ class SegmentRequest(BaseModel):
     id: str = Field(min_length=1, max_length=64)
     text: str = Field(max_length=MAX_TEXT)
     selector_tier: int | None = None
+
+
+class FeedbackRequest(BaseModel):
+    """A citizen saying a translation is wrong (FR-430).
+
+    `website` is a honeypot: a real reader never sees it, so anything that
+    fills it is automated. It is named plausibly on purpose, because a field
+    called `honeypot` is one a bot skips.
+    """
+
+    site: str = Field(min_length=1, max_length=128)
+    segment_key: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    reason: str = "other"
+    comment: str | None = Field(default=None, max_length=MAX_COMMENT_CHARS)
+    website: str | None = None  # honeypot
 
 
 class TranslateRequest(BaseModel):
@@ -83,11 +105,16 @@ def create_app(
     origin_limiter: RateLimiter | None = None,
     client_limiter: RateLimiter | None = None,
     hasher: ClientHasher | None = None,
+    reports: ReportStore | None = None,
+    feedback_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     app = FastAPI(title="dzweb orchestrator", version="0.1", docs_url=None, redoc_url=None)
     origin_limiter = origin_limiter or RateLimiter(per_minute=6000, burst=600)
     client_limiter = client_limiter or RateLimiter(per_minute=120, burst=30)
     hasher = hasher or ClientHasher()
+    # FR-432: 10 reports an hour per client. A burst of 10 so a reader who
+    # spots several bad segments on one page can report them all at once.
+    feedback_limiter = feedback_limiter or RateLimiter(per_minute=10 / 60, burst=10)
 
     @app.options("/v1/translate")
     async def preflight(request: Request) -> Response:
@@ -151,6 +178,78 @@ def create_app(
         if request.headers.get("if-none-match") == etag:
             return Response(status_code=304, headers=headers)
         return Response(content, media_type="application/json", headers=headers)
+
+    @app.options("/v1/feedback")
+    async def feedback_preflight(request: Request) -> Response:
+        origin = request.headers.get("origin")
+        if origin is None or not sites.origin_enrolled(origin):
+            return _error(403, "origin not enrolled")
+        return Response(
+            status_code=204,
+            headers={
+                **_cors(origin),
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Max-Age": "600",
+            },
+        )
+
+    @app.post("/v1/feedback")
+    async def feedback(request: Request) -> Response:
+        """Accept a citizen's report that a translation is wrong (FR-430, FR-432).
+
+        Every outcome that is not a configuration error answers 202 with the
+        same body. A report that was stored, one dropped for rate limiting, one
+        dropped because the segment has had its fill today, and one dropped as
+        a honeypot hit are indistinguishable from outside.
+
+        That is the point. Distinguishable outcomes turn this endpoint into an
+        oracle: a probe could map which segments are saturated, or tune itself
+        against the limiter until it finds the edge. It also spares an honest
+        reader who happens to trip a limit from being told their report did not
+        count, which would teach them not to bother again.
+        """
+        origin = request.headers.get("origin")
+        raw = await request.body()
+        if len(raw) > MAX_BODY_BYTES:
+            return _error(413, "request too large")
+        try:
+            body = FeedbackRequest.model_validate(json.loads(raw))
+        except (ValueError, UnicodeDecodeError, ValidationError):
+            return _error(400, "invalid request")
+
+        site = sites.allows(body.site, origin)
+        if site is None or origin is None:
+            return _error(403, "origin not enrolled for this site")
+
+        accepted = Response(status_code=202, headers=_cors(origin))
+        if reports is None:
+            return accepted  # no store configured: accept and discard
+
+        client = client_bucket(request.client.host if request.client else "unknown")
+        # The hash decides whether to accept; it is never written down (NFR-303).
+        limited = not feedback_limiter.allow(f"{origin}|{hasher.hash(client)}")
+        honeypot = bool(body.website)
+        saturated = segment_is_saturated(reports, body.segment_key, datetime.now(UTC))
+
+        if limited or honeypot or saturated:
+            log.info(
+                "feedback dropped site=%s reason=%s",
+                site.site_id,
+                "honeypot" if honeypot else ("saturated" if saturated else "rate_limited"),
+            )
+            return accepted
+
+        reports.record_report(
+            ErrorReport(
+                segment_key=body.segment_key,
+                site_id=site.site_id,
+                reason=body.reason if body.reason in REASONS else "other",
+                comment=body.comment or None,
+            )
+        )
+        log.info("feedback stored site=%s reason=%s", site.site_id, body.reason)
+        return accepted
 
     @app.post("/v1/translate")
     async def translate(request: Request) -> Response:

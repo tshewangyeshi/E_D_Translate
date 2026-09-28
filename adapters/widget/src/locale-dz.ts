@@ -54,3 +54,35 @@ export function isTibetan(text: string): boolean {
  */
 export const LABEL_SWITCH_TO_DZ = "\u0F62\u0FB1\u0F7C\u0F44\u0F0B\u0F41";  // Dzongkha
 export const LABEL_SWITCH_TO_EN = "English";
+
+/**
+ * Machine-translation notice (FR-520, FR-522).
+ *
+ * Bilingual on purpose. A reader who cannot read Dzongkha well enough to judge
+ * the translation is exactly the reader who most needs to be told it is
+ * machine output, and a reader who reads only Dzongkha needs the same warning.
+ * Showing one language would leave one of them uninformed.
+ *
+ * Written as escapes so the text survives any editor or tool that mangles the
+ * script, and so this file stays the only place Dzongkha lives (NFR-500).
+ */
+export const NOTICE_DZ =
+  // "This page was translated by machine. It may contain mistakes."
+  "\u0F62\u0FB1\u0F7C\u0F44\u0F0B\u0F41\u0F0B\u0F51\u0F7A\u0F0B\u0F60\u0F55\u0FB2\u0F74\u0F63\u0F0B\u0F62\u0F72\u0F42\u0F0B\u0F42\u0F72\u0F66\u0F0B\u0F66\u0F92\u0FB1\u0F74\u0F62\u0F0B\u0F56\u0F0D " +
+  "\u0F53\u0F7C\u0F62\u0F0B\u0F60\u0F41\u0FB2\u0F74\u0F63\u0F0B\u0F60\u0F51\u0F74\u0F42\u0F0D";
+
+export const NOTICE_EN =
+  "Translated by machine. It may contain mistakes.";
+
+/** The report-an-error control (FR-522), bilingual for the same reason. */
+export const REPORT_DZ = "\u0F53\u0F7C\u0F62\u0F0B\u0F60\u0F41\u0FB2\u0F74\u0F63\u0F0B\u0F66\u0FB9\u0FB1\u0F53\u0F0D";  // report an error
+export const REPORT_EN = "Report an error";
+
+/** Shown while the reader is choosing which block is wrong. */
+export const PICK_DZ = "\u0F53\u0F7C\u0F62\u0F0B\u0F56\u0F0B\u0F42\u0F44\u0F0B\u0F60\u0F51\u0F72\u0F0B\u0F60\u0F53\u0F0B\u0F63\u0F0B\u0F60\u0F55\u0FB1\u0F44\u0F0D";
+export const PICK_EN = "Tap the text that is wrong";
+
+export const THANKS_DZ = "\u0F56\u0F40\u0F60\u0F0B\u0F51\u0FB2\u0F72\u0F53\u0F0B\u0F46\u0F7A\u0F0D";  // thank you
+export const THANKS_EN = "Thank you";
+
+export const CLOSE_EN = "Hide";

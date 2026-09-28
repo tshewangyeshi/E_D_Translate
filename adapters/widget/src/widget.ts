@@ -269,7 +269,7 @@ export class Widget {
         }
         const record = sent.get(id);
         if (record === undefined) continue;
-        this.write(record, epoch, result.text, result.origin);
+        this.write(record, epoch, result.text, result.origin, result.segmentKey);
         // Writing is synchronous DOM work. Yielding every few blocks keeps any
         // single task short enough that a tap still feels immediate (ER-20).
         written += 1;
@@ -299,6 +299,7 @@ export class Widget {
     epoch: number,
     translated: string,
     origin: string | undefined,
+    segmentKey: string | undefined,
   ): void {
     const { segment, slots, generation } = record;
     if (this.epoch !== epoch || this.showing !== "dz") return;
@@ -310,6 +311,7 @@ export class Widget {
     state.segment = segment;
     state.lastWritten = readSlots(segment).map(stripForCompare);
     state.translated = true;
+    if (segmentKey !== undefined) state.segmentKey = segmentKey;
     this.translatedBlocks.push(makeRef(segment.block));
     markLanguage(segment.block, origin);
   }
@@ -407,6 +409,23 @@ export class Widget {
     }
     if (affected.length === 0 || this.showing !== "dz") return;
     void this.pass(this.epoch, true, affected);
+  }
+
+  /** True once any block on the page is showing machine output (FR-520). */
+  get showingMachineOutput(): boolean {
+    return this.translatedBlocks.some((ref) => {
+      const block = ref.deref();
+      return block !== undefined && block.getAttribute("lang") === "dz-x-mtfrom-en";
+    });
+  }
+
+  /** The reportable key for a block, if the widget translated it (FR-430). */
+  segmentKeyFor(block: Element): string | undefined {
+    for (let at: Element | null = block; at !== null; at = at.parentElement) {
+      const state = this.registry.get(at);
+      if (state?.translated) return state.segmentKey;
+    }
+    return undefined;
   }
 
   private stateFor(segment: Segment): BlockState {

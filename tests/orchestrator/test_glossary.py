@@ -211,8 +211,17 @@ def test_fr401_under_adversarial_model_targets_are_exact_or_block_falls_back(fmt
     fmt = MODEL_FORMATS[fmt_name]
     rng = random.Random(606)  # noqa: S311 - deterministic test data
     mock = MockNMT(fmt, seed=606, modes={m: 1.0 for m in Mode})
-    phrases = ["the fee", "Department of Immigration", "UN", "citizenship certificate",
-               "Nu. 500", "30 June 2026", "Form Five", "apply", "online"]
+    phrases = [
+        "the fee",
+        "Department of Immigration",
+        "UN",
+        "citizenship certificate",
+        "Nu. 500",
+        "30 June 2026",
+        "Form Five",
+        "apply",
+        "online",
+    ]
     served = 0
     for _ in range(1000):
         text = " ".join(rng.choice(phrases) for _ in range(rng.randint(2, 6)))
