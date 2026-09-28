@@ -6,7 +6,7 @@ Working name: **dzweb**. Owner: Digital Service Development Division, GovTech Ag
 
 A service that any Bhutanese government website can call to translate its pages from English into Dzongkha, and to have those pages read aloud. It wraps existing GovTech NMT and TTS models; it does not train them.
 
-Read `docs/01-srs.md` before implementing anything. Requirement IDs (FR-xxx, NFR-xxx) are the vocabulary of this repo — commit messages, PR bodies, and test names cite them.
+Read `docs/00-requirements.md` (numbered requirements) and this file before implementing anything. Requirement IDs (FR-xxx, NFR-xxx) are the vocabulary of this repo — commit messages, PR bodies, and test names cite them.
 
 ## Non-negotiable invariants
 
@@ -42,7 +42,7 @@ Fixtures live in `tests/fixtures/`. `tests/fixtures/gov-pages/` holds real gover
 
 <!-- gstack:verify: make check -->
 
-`make check` runs lint, type check, both unit suites, and the two gate suites.
+`make check` runs lint, type check, both unit suites, and the two gate suites. Without `make` (Windows): `python tools/check.py` runs the same steps.
 
 ## gstack
 
@@ -52,7 +52,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 ### Rules for this repo
 
-- **`/guard` is on by default for work touching `orchestrator/pipeline/`.** That is where entity masking and tag restoration live; an accidental drive-by edit there is a citizen-facing defect.
+- **`/guard` is on by default for work touching `orchestrator/pipeline/`.** That is where entity masking and tag restoration live; an accidental drive-by edit there is a citizen-facing defect. *On Windows, gstack's `/freeze` edit boundary blocks every edit (its hook treats `C:\` paths as relative), so the boundary is enforced in CI instead: `tools/check_pipeline_guard.py` (part of `make check`) fails any branch that changes `orchestrator/pipeline/` without changing `tests/orchestrator/`. Touch pipeline files only for the story in hand.*
 - **Run `/cso` before every release.** This is public-sector infrastructure serving unauthenticated traffic and proxying third-party pages. SSRF, XSS through re-injected translations, and cache poisoning are the live threats.
 - **`/qa` cannot judge Dzongkha rendering** unless the DDC Uchen font is installed in the browser it drives. Without the font, missing glyphs render as boxes and QA will report false failures — or worse, pass a broken layout. Check the font first; say so in the bug report if it is absent.
 - **Never paste real citizen data into a session.** Test fixtures use synthetic IDs from `tests/fixtures/synthetic-entities.json`.

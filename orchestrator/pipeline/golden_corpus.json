@@ -1,0 +1,15 @@
+{
+  "_comment": "Golden corpus for the derived pipeline version (FR-154). Its masked and segmented output is hashed at startup: any change to masking patterns, segment grammar or split rules that alters output changes pipeline_version automatically. Synthetic content only. Extend it when a new behaviour must be pinned.",
+  "segments": [
+    "Click ⟦1⟧here⟦/1⟧ to apply.",
+    "Pay Nu. 1,500 before 30 June 2026.",
+    "Enter your CID 00012345678 in the form.",
+    "Quote reference MoXX/DEMO/2026/123 in all letters.",
+    "Call 90000001 or write to applications@portal.gov.example.",
+    "Apply online at https://portal.gov.example/services/renewal.",
+    "Fees rose by 12.5% in 2025; late fees are BTN 2500.50.",
+    "Deadline: June 30, 2026 ⟦v1/⟧ Ngultrum 300 after 1st July 2026.",
+    "Line one⟦v1/⟧line two ⟦2⟧with a link⟦/2⟧ end.",
+    "Use ⟦⟦ and ⟧⟧ literally. Second sentence! Third one?"
+  ]
+}

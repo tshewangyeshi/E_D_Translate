@@ -1,0 +1,13 @@
+{
+  "_comment": "SAMPLE termbase for tests only. Targets are DUMMY Tibetan-script strings, NOT DCDD-approved translations. The real termbase is owned and published by DCDD (FR-403).",
+  "termbase_version": "sample-2026.09.1",
+  "terms": [
+    {"id": "T-0001", "version": 2, "source": "Department of Immigration", "target": "ཀ་ཁ་ག་ང", "case_sensitive": false},
+    {"id": "T-0002", "version": 1, "source": "Department", "target": "ཅ་ཆ", "case_sensitive": false},
+    {"id": "T-0003", "version": 1, "source": "citizenship certificate", "target": "ཇ་ཉ་ཏ", "case_sensitive": false},
+    {"id": "T-0004", "version": 3, "source": "UN", "target": "ཐ་ད", "case_sensitive": true},
+    {"id": "T-0005", "version": 1, "source": "fee", "target": "ན་པ", "case_sensitive": false},
+    {"id": "T-0006", "version": 1, "source": "Form Five", "target": "ཕ་བ་༥", "case_sensitive": false},
+    {"id": "T-0007", "version": 1, "source": "Old Office", "target": "མ་ཙ", "case_sensitive": false, "status": "retired"}
+  ]
+}

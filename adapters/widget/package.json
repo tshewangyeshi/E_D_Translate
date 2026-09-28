@@ -1,0 +1,26 @@
+{
+  "name": "@dzweb/widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dzweb browser widget: in-place English to Dzongkha translation (FR-200..218)",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "build": "node scripts/build.mjs",
+    "export-segments": "node scripts/export-segments.mjs",
+    "test:e2e": "playwright test --project=fixtures",
+    "test:perf": "playwright test --project=perf --workers=1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^20.19.43",
+    "esbuild": "0.28.2",
+    "jsdom": "^25.0.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "~5.6.3",
+    "vitest": "^2.1.9",
+    "vue": "3.5.43"
+  }
+}

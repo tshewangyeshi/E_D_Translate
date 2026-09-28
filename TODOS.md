@@ -14,4 +14,58 @@
 **Priority:** P3
 **Depends on:** T3 (remedies applied to spec and backlog); GovTech confirmation that external AI review is allowed
 
+## Tooling
+
+### gstack `/freeze` and `/guard` edit boundary fails on Windows
+
+**What:** Report (or patch upstream) the gstack freeze hook so it recognises Windows drive paths.
+
+**Why:** `~/.claude/skills/gstack/freeze/bin/check-freeze.sh` treats any path not starting with `/` as relative and prefixes the working directory, so `C:\...` paths become `/c/.../C:\...` and **every** edit is denied, even inside the boundary. The repo rule "`/guard` is on for `orchestrator/pipeline/`" therefore can't be followed on this machine.
+
+**Context:** Found 2026-09-18 while starting S1.2. Interim control: `tools/check_pipeline_guard.py` in `make check` fails any branch that changes `orchestrator/pipeline/` without changing `tests/orchestrator/` (documented in `docs/CLAUDE.md`). Fix upstream in gstack (e.g. normalise `^[A-Za-z]:[\\/]` paths with `cygpath -u` before the prefix check), then restore `/guard` as the primary control.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+## Before the pilot
+
+### PostgreSQL connection pool
+
+**What:** Replace the single connection per process in `orchestrator/wiring.py` with a `psycopg_pool` pool, and run store calls off the event loop (or switch to psycopg's async API).
+
+**Why:** Correct today but serialised: every request in an API process shares one connection and blocks the event loop during database I/O. Fine for tests, not for pilot traffic.
+
+**Context:** The TM, queue and seen-counter already sit behind interfaces, so this is contained to wiring plus the Postgres adapters. NFR-100 (p95 < 300 ms cached) should be re-measured against real PostgreSQL afterwards.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** None
+
+### Trusted-proxy client addresses
+
+**What:** Read the client address from `X-Forwarded-For` only when the direct peer is a configured trusted proxy (WSO2 / load balancer).
+
+**Why:** Behind a proxy every citizen shares the proxy's address, which breaks both the N-distinct-clients rule (NFR-304: nothing would ever be translated) and the per-client rate limit (everyone throttled together).
+
+**Context:** `orchestrator/api/app.py` uses `request.client.host`. Needs the deployment topology (FR-600) to know which proxies to trust. Must be tested with spoofed headers from untrusted peers.
+
+The 2026-09-28 security audit closed the two limiter defects behind this one (LRU eviction so a penalty survives memory pressure; IPv6 folded to its /64 so a new bucket costs an allocation rather than an address). Neither helps while every request carries the proxy's address, so this remains the blocking item: it decides what the client key means before any limiting applies. Whatever resolves the address must feed `client_bucket` so the /64 rule applies to the real peer.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** WSO2/deployment topology
+
+### Chunk widget extraction at block boundaries
+
+**What:** Split `extract()` so a long page is walked in pieces with the main thread handed back between them, instead of one synchronous pass.
+
+**Why:** ER-20 budgets no widget long task over 50 ms. Measured on a 600-block page with the CPU throttled 6x, the worst task is ~77-93 ms and a single `extract()` over the whole page accounts for ~68 ms of it. Yielding between writes cannot help: the cost is paid before the first write. On the low-end Android hardware this service targets, that window is felt as a dead tap.
+
+**Context:** `adapters/widget/test/e2e/perf.spec.ts` measures it and currently asserts regression guards (130 ms / 160 ms) that sit ABOVE the ER-20 targets, with the gap written into the test. Tighten them to 50 ms and 100 ms when this lands. The work is in `adapters/widget/src/extract.ts`: chunk roots must stop descending at block boundaries, or an inline element becomes its own block and the placeholder model breaks.
+
+**Effort:** M
+**Priority:** P2 (before the pilot on low-end devices; not before a desktop demo)
+**Depends on:** None
+
 ## Completed

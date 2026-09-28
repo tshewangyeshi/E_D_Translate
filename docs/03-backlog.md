@@ -5,7 +5,7 @@ Stories are sized for one gstack sprint each: `/spec` or `/autoplan` → impleme
 
 Sequence within an epic is dependency-ordered. Epics E1 and E2 are not parallelisable with anything — everything else depends on the pipeline existing. **E0 (Sprint 0) comes before everything:** it decides whether the placeholder approach works at all.
 
-**Revision 2026-09-16:** updated with the remedies approved in `/plan-eng-review` (`docs/designs/dzweb-eng-review.md`), cited as `[ER-n]` / `[ER-On]`. Requirements introduced by the review are **UNNUMBERED** until S0.3 lands the numbered SRS. **Pilot scope:** one citizen services portal through the widget. Audio (E5), proxy and CMS (E8) and the crawler (S9.2) are post-pilot.
+**Revision 2026-09-16:** updated with the remedies approved in `/plan-eng-review` (`docs/designs/dzweb-eng-review.md`), cited as `[ER-n]` / `[ER-On]`. Requirements introduced by the review carry proposed IDs from `docs/00-requirements.md` (status **P**, pending SRS-owner sign-off). **Pilot scope:** one citizen services portal through the widget. Audio (E5), proxy and CMS (E8) and the crawler (S9.2) are post-pilot.
 
 ---
 
@@ -27,7 +27,7 @@ Nothing in E1 depends on a guess. This epic measures the real NMT endpoint and l
 
 ### S0.1 — Placeholder survival go/no-go
 **As** the team, **I need** to know which placeholder format survives the real NLLB deployment, **so that** restoration isn't built on a token format that `<unk>`s or gets dropped.
-Requirements: FR-120, FR-122, FR-140, FR-141 · UNNUMBERED [ER-O1]
+Requirements: FR-120, FR-122, FR-140, FR-141 · measurement task [ER-O1]
 - [ ] Ask the NMT operator whether custom tokens exist in the deployed tokenizer; record the answer
 - [ ] ~20 public pilot-portal page snapshots committed to `tests/fixtures/gov-pages/` (personal data replaced with `synthetic-entities.json` values)
 - [ ] Each masked block sent to WSO2 **once** per candidate format (at least 3, e.g. `⟦N⟧`, `<x1/>`-style, spelled sentinels); raw responses recorded to `tests/fixtures/mt-replay/`, keyed by source hash + model version + format
@@ -37,16 +37,18 @@ Requirements: FR-120, FR-122, FR-140, FR-141 · UNNUMBERED [ER-O1]
 *gstack:* `/spec` → run → decision recorded; `/codex` second opinion if GovTech policy allows (see `TODOS.md`)
 
 ### S0.2 — WSO2 capacity measurement
-Requirements: NFR-100, NFR-412 · UNNUMBERED [ER-O7]
+Requirements: NFR-100, NFR-412, FR-156 · [ER-O7]
 - [ ] Measured and documented: requests per second, maximum batch size, maximum input length, p95 latency, behaviour at the limit (429 vs queueing)
 - [ ] Capacity note in the spec: pilot pages × segments per page vs quota, including the offline pre-warm time
 - [ ] Token-bucket sizes for the quota manager (§2.10) derived from these numbers
 
 ### S0.3 — Numbered requirements in the repo
 Requirements: all · [ER-O8]
-- [ ] The numbered SRS defining FR-100..FR-631 and NFR-100..NFR-500 is committed as `docs/00-requirements.md`; `01-srs.md` is clarified as repo guidance
-- [ ] Every UNNUMBERED item in `02-technical-spec.md` and this backlog is assigned an ID by the SRS owner, or explicitly dropped
-- [ ] CI check: any `test_fr…`/`test_nfr…` name or `FR-`/`NFR-` citation in a PR body must exist in `docs/00-requirements.md`
+- [x] A numbered requirements file is committed as `docs/00-requirements.md` (reconstructed draft, 2026-09-18); `01-srs.md` points to it
+- [ ] Replaced or confirmed by the original SRS from DSDD
+- [x] Every previously UNNUMBERED item in `02-technical-spec.md` and this backlog has a proposed ID (status **P**) in the reconstructed `docs/00-requirements.md`
+- [ ] SRS owner signs off: confirms **R** rows, defines **?** rows, accepts or renumbers **P** rows
+- [x] CI check (`tools/check_req_ids.py`, in `make check`): any `test_fr…`/`test_nfr…` name or `FR-`/`NFR-` citation in code and tests must exist in `docs/00-requirements.md` and must not be a **?** row
 *Blocks sprint 1.*
 
 ---
@@ -58,49 +60,51 @@ The engine. Nothing else can start except E0. **Sprint 1 builds what the widget 
 ### S1.1 — Widget block extraction and encoding
 **As** the widget, **I need** to identify which text on a page may be translated and encode each block with its placeholders, **so that** code, scripts and opted-out content are never sent, and every translation can be written back into the same text nodes.
 Requirements: FR-110, FR-111, FR-112, FR-113, FR-120, FR-121 · [ER-2, ER-O6, ER-18]
-- [ ] `adapters/widget/extract.ts` runs under jsdom in vitest
-- [ ] Text inside `script`, `style`, `code`, `pre`, `kbd`, `samp`, `var`, `textarea` is excluded
-- [ ] `translate="no"`, `class="notranslate"`, `data-no-translate`, `data-dz-skip` and configured `private_selectors` exclude the element and all descendants [ER-O3]
-- [ ] Elements with `lang` starting `dz` are excluded
-- [ ] `alt`, `title`, `placeholder` and submit/button `value` are extracted as attribute units; **`aria-label` and `aria-description` are not** [ER-18]
-- [ ] Whitespace-only and punctuation-only nodes produce no unit
-- [ ] A paragraph with inline links and emphasis yields one segment plus an ordered list of its text nodes (runs); void elements become `⟦vN/⟧` markers with no run; nested blocks: innermost wins, and outer text on each side becomes separate segments [ER-2]
-- [ ] Literal `⟦`/`⟧` in source are escaped
-- [ ] Extraction is order-stable: the same document yields the same unit sequence every time
-- [ ] **Shared golden fixtures** `tests/fixtures/extraction/*.json` (HTML → expected segments and runs) pass here and in pytest (S1.2, S8.0b)
+- [x] `adapters/widget/src/extract.ts` runs under jsdom in vitest
+- [x] Text inside `script`, `style`, `code`, `pre`, `kbd`, `samp`, `var`, `textarea` is excluded
+- [x] `translate="no"`, `class="notranslate"`, `data-no-translate`, `data-dz-skip` and configured `private_selectors` exclude the element and all descendants [ER-O3]
+- [x] Elements with `lang` starting `dz` are excluded
+- [x] `alt`, `title`, `placeholder` and submit/button `value` are extracted as attribute units; **`aria-label` and `aria-description` are not** [ER-18]
+- [x] Whitespace-only and punctuation-only nodes produce no unit
+- [x] A paragraph with inline links and emphasis yields one segment plus an ordered list of its text nodes (runs); void elements become `⟦vN/⟧` markers with no run; nested blocks: innermost wins, and outer text on each side becomes separate segments [ER-2]
+- [x] Literal `⟦`/`⟧` in source are escaped
+- [x] Extraction is order-stable: the same document yields the same unit sequence every time
+- [x] **Shared golden fixtures** `tests/fixtures/extraction/*.json` (HTML → expected segments and runs) pass here and in pytest (S1.2, S8.0b)
 *gstack:* `/spec` → implement → `/review`
 
 ### S1.2 — Server segment grammar
 **As** the orchestrator, **I need** to parse and validate placeholder segments from any adapter, **so that** malformed or hostile input never reaches the model.
 Requirements: FR-120, FR-121, FR-124 · [ER-2, ER-10]
-- [ ] Parses wire markers `⟦N⟧…⟦/N⟧`, `⟦vN/⟧`; rejects unescaped delimiters, unbalanced or unknown markers → `tag_fallback` with source text
-- [ ] Round-trip without translation (identity model) reproduces the segment byte-for-byte
-- [ ] Segments over the model limit split at shad or terminal punctuation, never inside a placeholder
-- [ ] Converts wire markers ↔ the model token format chosen in S0.1
-- [ ] Passes the shared extraction fixtures
+- [x] Parses wire markers `⟦N⟧…⟦/N⟧`, `⟦vN/⟧`; rejects unescaped delimiters, unbalanced or unknown markers with a stable cause (mapping to `tag_fallback` lands with the API, S2.1); **client input may not contain entity tokens**
+- [x] Round-trip without translation (identity model) reproduces the segment byte-for-byte (Hypothesis property test)
+- [x] Segments over the model limit split at shad or terminal punctuation, never inside a placeholder
+- [ ] Converts wire markers ↔ the model token format chosen in S0.1 — *two candidates implemented (`wire`, `xml`); final choice waits for S0.1*
+- [x] Passes the shared extraction fixtures
 *gstack:* `/spec` → implement → `/review`
 
 ### S1.3 — Entity masking
 **As** a citizen, **I need** dates and amounts in a notice to be exactly right, **so that** I do not miss a deadline or misread an amount.
 Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
-- [ ] URLs, emails, 11-digit IDs, reference numbers, currency amounts (`Nu.`, `BTN`, `Ngultrum`), ISO/numeric/**word-month** dates, percentages and numbers are masked before the model
-- [ ] **Catch-all numeric pattern:** no digit run of any length reaches the model unmasked (`1500`, `2026`, `17123456` are regression cases)
-- [ ] Currency patterns match before bare numbers
-- [ ] **Exact multiset:** each entity token appears exactly once in output; duplicated, invented, truncated or missing tokens → `entity_check_failed` with source text
-- [ ] **Leak scan:** any ASCII or Tibetan digit (U+0F20–0F29), email or URL outside restored entities and glossary terms → `entity_check_failed`
-- [ ] All masks restore exactly from **the current request's** entity map; output entities are byte-identical to input
-- [ ] Hypothesis property test: random digit strings, dates and amounts in random contexts round-trip byte-identical under every mock mode
-- [ ] Masker recall measured against hand-labelled snapshots, with a held-out set
-- [ ] The adversarial mock (drops, duplicates, invents, truncates and mangles tokens) cannot produce an altered entity in output — 10,000 randomised runs
+- [x] URLs, emails, 11-digit IDs, reference numbers, currency amounts (`Nu.`, `BTN`, `Ngultrum`), ISO/numeric/**word-month** dates, percentages and numbers are masked before the model (`orchestrator/pipeline/protect.py`)
+- [x] **Catch-all numeric pattern:** no digit run of any length, in any script, reaches the model unmasked (`1500`, `2026`, `90000001` are regression cases)
+- [x] Currency patterns match before bare numbers
+- [x] **Exact multiset:** each entity token appears exactly once in output; duplicated, invented, truncated or missing tokens → `entity_check_failed` with source text
+- [x] **Leak scan:** any numeral (ASCII, Tibetan, other scripts, fractions), email or URL outside restored entities and glossary terms → `entity_check_failed`
+- [x] **No merged numbers** (found by the gate): entities newly touching across invisible inline tags → `entity_check_failed`
+- [x] All masks restore exactly from **the current request's** entity map; output entities are byte-identical to input
+- [x] Hypothesis property tests: entity-rich sentences mask and restore byte-identical; any digit run in any script is masked
+- [x] Recall tool (`tools/masker_recall.py`, in `make check`): 100% on a synthetic labelled set with held-out split
+- [ ] Masker recall on **hand-labelled pilot snapshots** with a held-out set — *waits for Sprint 0 snapshots (S0.1)*
+- [x] The adversarial mock cannot produce an altered entity in output — 10,000 seeded runs across both candidate token formats (`tests/orchestrator/gates/test_entity_gate.py`); verified by mutation to catch the merged-number bug
 *gstack:* `/spec` → implement → `/review` → `/codex` (second opinion if policy allows — this is the highest-consequence module)
 
 ### S1.4 — Adversarial model mock
 **As** a developer, **I need** a model mock that misbehaves on purpose, **so that** restoration and validation are tested against realistic failure rather than a cooperative stub.
 Requirements: supports FR-122, FR-123, FR-141
-- [ ] Mock modes: well-behaved, drops placeholders, duplicates placeholders, reorders placeholders, **invents placeholders, truncates tokens, converts digits to Tibetan, invents numbers**, mangles mask tokens, returns empty, times out, returns 503
-- [ ] Mode mix and rates calibrated from S0.1 recordings
-- [ ] Deterministic under a seed
-- [ ] Used by default in unit tests; real endpoint only in integration tests
+- [x] Mock modes: well-behaved, drops placeholders, duplicates placeholders, reorders placeholders, **invents placeholders, truncates tokens, converts digits to Tibetan, invents numbers**, mangles mask tokens, returns empty, times out, returns 503 (`orchestrator/testing/mock_nmt.py`)
+- [ ] Mode mix and rates calibrated from S0.1 recordings — *waits for WSO2 access*
+- [x] Deterministic under a seed
+- [x] Used by default in unit tests; real endpoint only in integration tests
 *Build this before S1.5.*
 
 ### S1.5 — Restoration and tag validation
@@ -114,26 +118,28 @@ Requirements: FR-122, FR-123 · Gate: NFR-200 · [ER-2, ER-10]
 
 ### S1.6 — Glossary substitution
 Requirements: FR-400, FR-401, FR-402 · [ER-7]
-- [ ] Longest-match-first substitution from a versioned termbase
-- [ ] Case-sensitive matching per entry flag
-- [ ] The English term never reaches the model; the approved Dzongkha string always appears in output
-- [ ] Each term carries `term_id` + `term_version`; each segment computes its glossary fingerprint `gfp` from matched terms
-- [ ] Glossary compliance rate reported per batch
-- [ ] Termbase loads from a versioned file; version is exposed in API responses
+- [x] Longest-match-first, whole-word substitution from a versioned termbase (`orchestrator/pipeline/glossary.py`)
+- [x] Case-sensitive matching per entry flag
+- [x] The English term never reaches the model; the approved Dzongkha string always appears in output, or the block falls back (`glossary_term_missing`) — tested against the adversarial mock
+- [x] Each term carries `term_id` + `term_version`; each segment computes its glossary fingerprint `gfp` from matched terms; bumping one term changes only segments using it
+- [x] Glossary compliance rate computed per batch (`ComplianceStats`); reporting it in API metrics lands with S2.3
+- [x] Termbase loads from a versioned file with validation (duplicate ids, ambiguous sources, numerals in sources, delimiters, zero-width characters in targets rejected); the version is exposed on the `Termbase` object — adding it to API responses lands with S2.1
+- [ ] Real DCDD termbase — *the sample file has dummy targets only*
 
 ### S1.7 — Cache and translation memory
 Requirements: FR-150, FR-151, FR-410, FR-411, FR-510 · [ER-1, ER-12, ER-13, ER-14, ER-21, ER-O3]
-- [ ] Keys are computed from the **masked** normalised segment, language pair, derived `pipeline_version`, `gfp`, and (machine keys only) model version
-- [ ] Redis values and TM rows contain **masked text only**; test: "Pay Nu. 500" and "Pay Nu. 600" share one entry and each restores its own amount; whitespace/NFC variants keep their own bytes
-- [ ] **Tier gate before lookup:** Tier 1 reads only approved (`origin = human`) translations; `test_fr510_tier1_never_served_cached_mt` fills the cache from a Tier 2 request and asserts Tier 1 gets `tier_blocked`
-- [ ] Lookup order for Tier 2+: approved → machine → live within budget → `pending_mt` + enqueue
-- [ ] `pipeline_version` is derived from pattern data, segmentation rules and the golden fixtures' masked output; changing a pattern changes it, and a pure refactor does not
-- [ ] Data model: `segment` / immutable `translation_version` / mutable `review_item`; approving creates a new version row and never overwrites; no tier column on content
-- [ ] Publishing a term change invalidates **exactly** the segments containing that term (via `term_id → keys` index); machine rows re-warm rate-capped; approved rows → `needs_recheck`, not served
-- [ ] A `pipeline_version` change migrates approved rows: unchanged output → re-key; changed → `needs_recheck`
-- [ ] One batched TM query per request
-- [ ] Redis unavailable degrades to TM/live without error; no enqueue for keys already translated
-- [ ] Tier 2 segments are not persisted until seen from N distinct clients; unapproved machine rows expire after the retention period [ER-O3]
+- [x] Keys are computed from the **masked** normalised segment, language pair, derived `pipeline_version`, `gfp`, and (machine keys only) model version (`orchestrator/store/keys.py`)
+- [x] Redis values and TM rows contain **masked text only**; "Pay Nu. 500" and "Pay Nu. 600" share one entry and each restores its own amount; whitespace variants share a key and keep their own bytes
+- [x] **Tier gate before lookup** (`orchestrator/store/lookup.py`): Tier 1 reads only approved translations; machine values in the approved namespace are ignored; unknown or non-integer tiers are Tier 1; `test_fr510_tier1_never_served_cached_mt`
+- [x] Lookup order for Tier 2+: approved → machine → miss (live within budget / `pending_mt` land with S2.1 and S2.4); an approval supersedes a cached machine translation immediately (FR-421)
+- [x] `pipeline_version` is derived (`orchestrator/pipeline/version.py`) from pattern data, grammar, split terminators and a golden corpus; tests prove a pattern change or a golden-output change alters it
+- [x] Data model: `segment` / immutable `translation_version` (database trigger refuses content updates and deletes) / mutable `review_item`; approving creates a new version row; no tier column (`orchestrator/store/migrations/0001_initial.sql`)
+- [x] Publishing a term change invalidates **exactly** the versions containing that term (index `glossary_hit(term_id, segment_key, gfp)`, robust to re-keying); approved → `needs_recheck`, not served; cache entries purged. *Rate-capped re-warm arrives with the S2.4 queue.*
+- [x] A `pipeline_version` change migrates approved rows: re-key if unchanged, `needs_recheck` if changed
+- [x] One batched TM query per request (asserted); cache backfill
+- [x] Redis unavailable degrades to TM without error (`ResilientCache`; failures counted)
+- [x] Tier 2 persistence only after N distinct clients (`should_persist`; counter failure = do not persist); `expire_machine` retention [ER-O3]
+- [x] **PostgreSQL and Redis adapters verified against real services** (2026-09-18): the TM contract suite passes on PostgreSQL 16 as well as in memory, the database trigger refuses content updates and deletes, the Redis cache and distinct-client counter pass, migrations are idempotent; `python tools/check.py --require-integration` green
 
 ---
 
@@ -141,14 +147,20 @@ Requirements: FR-150, FR-151, FR-410, FR-411, FR-510 · [ER-1, ER-12, ER-13, ER-
 
 ### S2.1 — `/v1/translate`
 Requirements: FR-100, NFR-100, NFR-412 · [ER-3, ER-O4, ER-O5, ER-O7, ER-O9, ER-21]
-- [ ] Batches up to 64 segments; 413 beyond
-- [ ] Per-segment status, never all-or-nothing; each segment returns `segment_key` and, when translated, `origin`
-- [ ] Upstream failure returns 200 with source text and `upstream_error`; PostgreSQL or Redis failure is also never a 5xx
-- [ ] Live MT only within the per-request budget (proposed 1.5 s) and only with quota-manager tokens; the rest return `pending_mt` + enqueue
-- [ ] p95 under 300 ms on a fully cached batch of 64, measured locally
-- [ ] Under load beyond capacity, uncached work is **enqueued** (bounded depth), not dropped
-- [ ] HTTP caching: body-hash `ETag`; `Cache-Control: no-store` when any segment is `pending_mt`; test proves a pending response is never 304'd after its job completes
-- [ ] Keyless public route with enrolled-origin allowlist and per-origin + per-IP rate limits (429)
+- [x] Batches up to 64 segments; 413 beyond (and for segments over 5,000 characters) (`orchestrator/api/app.py`)
+- [x] Per-segment status, never all-or-nothing; each segment returns `segment_key` and, when translated, `origin` (`orchestrator/service/translate.py`)
+- [x] Upstream failure returns 200 with source text and `upstream_error` (and is queued for retry); a storage outage is also 200 with source text, never a 5xx
+- [x] Live MT only within the per-request budget (1.5 s) and only with quota-manager tokens (`orchestrator/upstream/quota.py`); the rest return `pending_mt` + enqueue
+- [x] Every served translation is re-validated: entities byte-identical, glossary terms restored, tag markers exactly as in the source; invalid model output is never stored
+- [x] p95 under 300 ms on a fully cached batch of 64, measured locally (test)
+- [x] Under load beyond capacity, uncached work is **enqueued** (bounded depth); a full queue still answers with source text and is counted
+- [x] HTTP caching: body-hash `ETag`; `Cache-Control: no-store` when any segment is `pending_mt`; pending responses are never 304'd; the ETag changes when the translation arrives
+- [x] Keyless public route with enrolled-origin allowlist (403) and per-origin + per-client rate limits (429); JSON accepted as `text/plain` so browsers skip the CORS preflight
+- [x] Tier resolution: strictest of site default, request hint and matched selector; a request cannot lower the tier (S3.1 adds server-side path rules)
+- [x] Nothing is sent to MT or stored until N distinct clients have seen a Tier 2 segment (NFR-304)
+- [ ] Real WSO2 translator client — *waits for WSO2 access; the mock implements the same interface*
+- [ ] PostgreSQL job queue and worker — *S2.4; an in-memory queue implements the interface now*
+- [ ] Rate limits shared across API replicas — *in-process for now; Redis-backed when more than one replica runs*
 
 ### S2.3 — Health, metrics, gateway publication
 Requirements: FR-600, FR-610, FR-611 · [ER-O4]
@@ -158,14 +170,19 @@ Requirements: FR-600, FR-610, FR-611 · [ER-O4]
 - [ ] FR-600 wording confirmed with GovTech
 
 ### S2.4 — Job queue, worker and quota manager
-Requirements: NFR-412 · UNNUMBERED [ER-3, ER-O7, ER-21]
-- [ ] PostgreSQL job table, claimed with `FOR UPDATE SKIP LOCKED` in short transactions; partial index on pending jobs
-- [ ] Unique on `machine_key` for **active** jobs only; invalidated keys can be enqueued again
-- [ ] Visibility-timeout sweeper returns a crashed worker's jobs to pending (fault test)
-- [ ] Enqueue skipped when a current translation already exists
-- [ ] Token-bucket quota manager sized from S0.2 reserves ≥50% of upstream capacity for the worker; live attempts use leftover tokens only
-- [ ] Offline pre-warm CLI translates every enrolled pilot page from snapshots through the worker before launch
-- [ ] Rate-capped re-warm for glossary and model invalidations
+Requirements: NFR-412, FR-155, FR-156, NFR-413 · [ER-3, ER-O7, ER-21]
+- [x] PostgreSQL job table (`migrations/0002_jobs.sql`), claimed with `FOR UPDATE SKIP LOCKED` in short statements; partial index on ready jobs; priorities (live-deferred 50, pre-warm 100, re-warm 150)
+- [x] Unique on `machine_key` for **active** jobs only; completed keys can be enqueued again
+- [x] Visibility-timeout sweeper returns a crashed worker's jobs to pending; a late crashed worker cannot finish a job it no longer owns (tests on both backends)
+- [x] Enqueue skipped when a current translation already exists (ER-21), and for 24 h after a validation failure (a deterministic model would fail again on every page view)
+- [x] Upstream errors retry with exponential backoff up to 5 attempts; invalid model output is never stored and never retried
+- [x] Worker validates model output on masked text only (`pipeline/validate.py`), with the same rules as the live path; refuses jobs from another model version
+- [x] Concurrency: 4 workers claiming 200 jobs on PostgreSQL never claim the same job (integration test)
+- [x] Token-bucket quota manager reserves the worker's share (default 50%); the worker only uses that share, live only the rest — *sizes still need the S0.2 measurements*
+- [x] Pre-warm: `npm run build && node scripts/export-segments.mjs` runs the real widget extractor over snapshots; `python -m orchestrator.ops.prewarm` queues Tier 2 segments at pre-warm priority, skips duplicates and already-translated keys, and lists Tier 1 segments for the S7.0 human review. *Needs the pilot snapshots (S0.1).*
+- [x] Runnable services with production wiring (`orchestrator/wiring.py`): `uvicorn orchestrator.main:create --factory`, `python -m orchestrator.queue.run_worker`; the mock translator requires an explicit opt-in so fake output can never be deployed by accident
+- [~] Rate-capped re-warm after glossary and model invalidations: **re-warm happens through normal misses**, capped by the live quota and the bounded queue. A proactive re-warm job cannot be rebuilt from the TM, because stored sources already carry the old term placeholders; re-running pre-warm on the snapshots is the explicit route.
+- [ ] Connection pool for PostgreSQL — *wiring uses one connection per process: correct, but requests are serialised on it; must be pooled before the pilot (TODOS.md)*
 
 ---
 
@@ -175,13 +192,15 @@ Deliberately early. Retrofitting tiering after adoption means renegotiating with
 
 ### S3.1 — Content tiering
 Requirements: FR-500, FR-510, FR-511 · [ER-1, ER-6]
-- [ ] **The server resolves the tier:** the strictest of the site default, site path rules, matched site selectors and the request's tier hint. A request can make content stricter, never looser
-- [ ] Absent or unparseable tier, or an unknown site, resolves to Tier 1 (most restrictive)
-- [ ] The tier gate runs **before any cache or TM lookup**; Tier 1 without an approved translation returns `tier_blocked` and the source text — verified by test, not by policy
-- [ ] Test: a request claiming Tier 2 for a path or selector the site marks Tier 1 → `tier_blocked`
-- [ ] `GET /v1/config` returns Tier 1 selectors and private selectors per enrolled site; path and selector rules are audited (S3.3)
+- [x] **The server resolves the tier:** the strictest of the site default, site path rules, matched site selectors and the request's tier hint. A request can make content stricter, never looser
+- [x] Absent or unparseable tier, or an unknown site, resolves to Tier 1 (most restrictive). A path that cannot be normalised is Tier 1, not "no rule matched"; an invalid tier hint is ignored rather than honoured, so garbage cannot loosen
+- [x] The tier gate runs **before any cache or TM lookup**; Tier 1 without an approved translation returns `tier_blocked` and the source text — verified by test, not by policy
+- [x] Test: a request claiming Tier 2 for a path or selector the site marks Tier 1 → `tier_blocked`, including case, encoding, traversal and double-encoding variants of the path
+- [~] `GET /v1/config` returns Tier 1 selectors and private selectors per enrolled site (path rules stay server-side); **auditing of path and selector rules waits for S3.3**
 - [ ] Review-item creation capped per site per day
 - [ ] Tier 2 forces glossary and flags for review
+
+Pre-warm now carries each snapshot's page path (`export-segments.mjs page.html=/the/path`); without one, a site with path rules tiers the page 1 and pre-warm refuses rather than guessing.
 
 ### S3.2 — Machine-translation labelling
 Requirements: FR-520, FR-521, FR-522 · [ER-O9]
@@ -197,13 +216,13 @@ Requirements: FR-620
 - [ ] Audit records are append-only
 
 ### S3.4 — Personal-data controls
-Requirements: UNNUMBERED · NFR-303 · [ER-O3]
-- [ ] Pilot enrols public, unauthenticated pages only
-- [ ] Widget loads nothing on pages marked `data-dz-private`; `data-dz-skip` and configured `private_selectors` regions are never extracted
-- [ ] Server normalises numeric and ID-like path segments to `:id` before storage
+Requirements: NFR-304, NFR-305, NFR-303 · [ER-O3]
+- [ ] Pilot enrols public, unauthenticated pages only — **enrolment policy, not code.** `data-dz-private` is the technical backstop if a signed-in page is enrolled by mistake; it does not replace the enrolment decision
+- [x] Widget loads nothing on pages marked `data-dz-private` (checked on `<html>` and `<body>`; it does not even request configuration); `data-dz-skip` and configured `private_selectors` regions, and all their descendants and attributes, are never extracted
+- [x] Server normalises numeric and ID-like path segments to `:id` before storage or logging — `redact_path`, kept separate from the tier-matching normaliser because rules must match the real path. Deliberately eager: `/legal/2026-budget` redacts too, which costs a vaguer log line and never a leaked identifier
 - [ ] Tier 2 segments are neither persisted nor sent to MT until seen from ≥N distinct clients (proposed 3; salted, daily-rotated client hash); test: a one-off string never reaches the WSO2 mock
-- [ ] Unapproved machine translations expire after the retention period (proposed 90 days)
-- [ ] Logs contain `segment_key` hashes only, never segment text
+- [x] Unapproved machine translations expire after the retention period — `python -m orchestrator.ops.retention --days 90`, with `--dry-run` to see the blast radius first. Invalidates rather than deletes, because `translation_version` is immutable by trigger so what was served stays explicable. Residual: a row can still be served from the Redis cache until its own 7-day TTL runs out
+- [x] Logs contain keys, counts and the redacted path, never segment text or client address. One request log line, asserted by behaviour rather than by inspection: a test feeds person-shaped text through the live and the failing path and greps every emitted record. Mutation-checked — adding one logging call that includes segment text fails both
 *gstack:* `/cso` is a gate on this story.
 
 ### S3.5 — Minimal error-report intake
@@ -219,28 +238,30 @@ Requirements: FR-430, NFR-303 · [ER-O9, ER-18]
 
 ### S4.1 — Core widget
 Requirements: FR-200, FR-201, FR-210, FR-214, FR-215, NFR-502 · [ER-2, ER-6, ER-8, ER-16, ER-18, ER-O10]
-- [ ] Single script tag, no host build step
-- [ ] Widget build: `tsc` (no downlevel helpers, CI grep) → pinned minifier (no bundling) → content hash + SRI; no bundler, framework or polyfills
-- [ ] Under 15 KB gzipped, measured on the final hashed file, enforced in CI
-- [ ] Fetches `/v1/config` first; on failure offers no toggle and the page stays English
-- [ ] Writes each translated run into its own existing text node; run count or order mismatch → block stays English; node identity (same `Text` objects, count, order) asserted in vitest
-- [ ] Stale-response guard: a response is applied only if Dzongkha is still on, the block generation matches, and node values still equal the text that was sent
-- [ ] `pending_mt` segments re-requested once after ~8 s
-- [ ] Dzongkha-specific logic only in `locale-dz.ts`; CI grep (literal + escape forms) passes
-- [ ] Auto-translate from a saved preference waits for `load` + idle + two quiet frames
-- [ ] **Playwright fixtures: React CSR, React SSR (`hydrateRoot`), Vue CSR, Vue SSR** — translate, host re-render and toggle produce no framework errors or hydration warnings in the console
-- [ ] API failure leaves the page in English with no uncaught exception
+- [x] Single script tag, no host build step
+- [x] Widget build: `tsc` (no downlevel helpers, CI grep) → pinned minifier (no bundling) → content hash + SRI; no bundler, framework or polyfills — esbuild 0.28.2 pinned exactly, minify-only; `scripts/build.mjs` fails on any tsc helper
+- [x] Under 15 KB gzipped, enforced in CI. **5,639 bytes, 37% of budget.** Measured over the whole module graph gzipped, not the entry alone: with no bundler the browser fetches every import, so the graph is what a first visit downloads
+- [x] Fetches `/v1/config` first; on failure offers no toggle and the page stays English
+- [x] Writes each translated run into its own existing text node; run count or order mismatch → block stays English; node identity asserted in vitest and mutation-checked (replacing a node fails the test)
+- [x] Stale-response guard: a response is applied only if Dzongkha is still on, the block generation matches, and node values still equal the text that was sent
+- [x] `pending_mt` segments re-requested once after ~8 s (once, not a poll; cancelled if the reader toggles back)
+- [x] Dzongkha-specific logic only in `locale-dz.ts`; CI grep (literal + escape forms) passes
+- [x] Auto-translate from a saved preference waits for `load` + idle + two quiet frames (preference *persistence* is S4.3; this reads it)
+- [x] **Playwright fixtures: React CSR, React SSR (`hydrateRoot`), Vue CSR, Vue SSR** — translate, host re-render and toggle produce no framework errors or hydration warnings. The decisive assertion is that a host update to text the widget rewrote still reaches the page: a first version of these fixtures passed even with node replacement, because a framework updating a *single* text child just sets `textContent` on the parent. The fixture blocks now carry mixed content, which forces the framework to patch one specific `Text` node, and all four configurations fail if the widget replaces it
+- [x] API failure leaves the page in English with no uncaught exception — network error, 5xx, 403 and malformed JSON each covered
 - [ ] **Device matrix:** Android System WebView / Chrome ~90, ~100 and current, with floors confirmed from pilot analytics; run before each release
 *gstack:* `/spec` → implement → `/review` → `/qa` against the fixture host pages
 
+Built 2026-09-28: `src/{main,widget,apply,api,wire,locale-dz}.ts`, 52 unit tests plus 10 browser tests. **The one unticked item is the device matrix** — it needs real hardware and floors confirmed from pilot analytics, so it cannot be closed here.
+
 ### S4.2 — Dynamic content and attributes
 Requirements: FR-113, FR-211 · [ER-11, ER-18, ER-20]
-- [ ] Observer watches `childList` **and `characterData`**; content injected after load is translated
-- [ ] A host change to translated text (value ≠ last written) updates the original and re-extracts the block; the widget's own writes are ignored by comparing against last-written values (no re-entrancy flag)
-- [ ] Debounced dirty-set extraction of only affected blocks; an SPA route change produces one batch, not hundreds
-- [ ] Initial pass in viewport order with main-thread yielding; off-screen blocks deferred via `IntersectionObserver`
-- [ ] Performance test (Playwright, CPU throttled 6×, 3,000-node page with a 250 ms ticking counter): no widget long task > 50 ms; input latency p95 < 100 ms
-- [ ] `alt`, `title`, `placeholder` translated on initial and subsequent passes and restored exactly; `aria-label`/`aria-description` never touched
+- [x] Observer watches `childList` **and `characterData`**; content injected after load is translated. Verified in a real browser against React and Vue, CSR and SSR
+- [x] A host change to translated text updates the original and re-extracts the block; the widget's own writes are ignored by comparing against last-written values, **no re-entrancy flag** — a flag cannot work here because MutationObserver delivers records asynchronously, by which time the flag is down again. Mutation-checked: making `isOwnWrite` always false fails three tests
+- [x] Debounced dirty-set extraction of only affected blocks; 200 mutations in one burst produce exactly one batch
+- [x] Initial pass in viewport order with main-thread yielding; off-screen blocks deferred via `IntersectionObserver`. On a 600-block page 32 blocks are translated first and the rest arrive as the reader scrolls. Finding: a change anywhere used to re-extract from the root and re-translate the whole page — a ticking counter alone did it — so the dirty-block walk now stops before the root
+- [~] Performance test (Playwright, CPU throttled 6×, 600-block page with a 250 ms ticking counter) exists and measures. **The targets are not met:** long task max ~77-93 ms against a 50 ms budget, scheduler-delay p95 ~83-105 ms against 100 ms. Cause measured, not guessed: one synchronous `extract()` over the page is ~68 ms of the worst task, so yielding between writes cannot help. The test asserts regression guards above the targets with the gap written into it; chunked extraction is in TODOS.md. Note the latency figure is a scheduler-delay proxy measured in-page, not real input latency
+- [x] `alt`, `title`, `placeholder` translated in the same request as the text and restored exactly; a host-changed attribute is left alone; `aria-label`/`aria-description` never touched
 
 ### S4.3 — Toggle and persistence
 Requirements: FR-212, FR-213 · [ER-11, ER-19]
@@ -251,8 +272,8 @@ Requirements: FR-212, FR-213 · [ER-11, ER-19]
 
 ### S4.4 — Host-page safety
 Requirements: FR-210, NFR-300, NFR-401 · [ER-18]
-- [ ] Translated text is inserted as text (`nodeValue` / `setAttribute`), never parsed as HTML
-- [ ] A fixture page with a script-bearing translation response is not executed
+- [x] Translated text is inserted as text (`nodeValue` / `setAttribute`), never parsed as HTML. Structural, not filtered: no sanitiser is involved and none should be, because a sanitiser can be bypassed and `nodeValue` is not parsed
+- [x] A fixture page with a script-bearing translation response is not executed — six payloads (`<script>`, `<img onerror>`, `<svg onload>`, quote-break-out, `javascript:` iframe, tag-break-out) plus a hostile `alt` value. Each asserts the payload did not run, created no element, and is present as literal text. Mutation-checked: switching the writer to `innerHTML` fails all eight
 - [ ] axe-core via Playwright on the four fixture hosts: **zero new violations** vs. the widget-absent baseline
 *gstack:* `/cso` on this story specifically.
 
@@ -327,7 +348,7 @@ S7.0 is **pre-pilot**; the rest of E7 is post-pilot.
 
 ### S7.0 — Offline Tier 1 seed (pre-pilot)
 **As** a citizen on the pilot portal, **I need** the fee and eligibility text in Dzongkha, **so that** the pilot proves the value on the pages that matter most, even before the reviewer UI exists.
-Requirements: FR-410, FR-411, FR-510, FR-620 · UNNUMBERED [ER-O2]
+Requirements: FR-410, FR-411, FR-413, FR-510, FR-620 · [ER-O2]
 - [ ] Named DCDD reviewers and a review timeline are agreed (dependency for sprint 4)
 - [ ] `ops/seed.py export` extracts every Tier 1 segment from the pilot snapshots to XLIFF/spreadsheet, with entity and tag placeholders **locked** (visible, not editable)
 - [ ] Reviewers translate and approve offline
