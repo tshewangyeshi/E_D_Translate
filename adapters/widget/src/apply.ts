@@ -99,6 +99,38 @@ function writeSlot(nodes: Text[], text: string, render = true): void {
   for (let n = 1; n < nodes.length; n += 1) (nodes[n] as Text).nodeValue = "";
 }
 
+/** What the widget remembers about one translated attribute (FR-113). */
+export interface AttributeState {
+  original: string;
+  lastWritten: string;
+}
+
+/**
+ * Write a translated attribute value.
+ *
+ * Attributes carry no inline markup and therefore no slots, so this is a plain
+ * value swap -- but the same rule applies: only write if the value is still the
+ * one we asked about, or a host update would be silently reverted.
+ */
+export function applyAttribute(
+  element: Element,
+  attr: string,
+  translated: string,
+  expected: string,
+): boolean {
+  if ((element.getAttribute(attr) ?? "") !== expected) return false;
+  element.setAttribute(attr, insertBreaks(translated));
+  return true;
+}
+
+/** Put an attribute back, unless the host has changed it since we wrote. */
+export function restoreAttribute(element: Element, attr: string, state: AttributeState): boolean {
+  const now = element.getAttribute(attr) ?? "";
+  if (stripRenderArtefacts(now) !== state.lastWritten) return false; // host owns it now
+  element.setAttribute(attr, state.original);
+  return true;
+}
+
 /** Mark a block's language for assistive technology and styling (FR-214). */
 export function markLanguage(block: Element, origin: string | undefined): void {
   block.setAttribute("lang", origin === "human" ? "dz" : "dz-x-mtfrom-en");

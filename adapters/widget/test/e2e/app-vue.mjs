@@ -8,7 +8,7 @@
 export function options(h, content) {
   return {
     data() {
-      return { ...content, counter: 0 };
+      return { ...content, counter: 0, extra: [] };
     },
     render() {
       return h("main", null, [
@@ -21,6 +21,7 @@ export function options(h, content) {
         h("p", null, this.fee),
         h("p", { class: "legal" }, this.legal),
         h("p", { id: "counter" }, `Counter: ${this.counter}`),
+        ...this.extra.map((text) => h("p", { class: "added" }, text)),
       ]);
     },
   };

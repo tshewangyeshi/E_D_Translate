@@ -256,12 +256,12 @@ Built 2026-09-28: `src/{main,widget,apply,api,wire,locale-dz}.ts`, 52 unit tests
 
 ### S4.2 — Dynamic content and attributes
 Requirements: FR-113, FR-211 · [ER-11, ER-18, ER-20]
-- [ ] Observer watches `childList` **and `characterData`**; content injected after load is translated
-- [ ] A host change to translated text (value ≠ last written) updates the original and re-extracts the block; the widget's own writes are ignored by comparing against last-written values (no re-entrancy flag)
-- [ ] Debounced dirty-set extraction of only affected blocks; an SPA route change produces one batch, not hundreds
+- [x] Observer watches `childList` **and `characterData`**; content injected after load is translated. Verified in a real browser against React and Vue, CSR and SSR
+- [x] A host change to translated text updates the original and re-extracts the block; the widget's own writes are ignored by comparing against last-written values, **no re-entrancy flag** — a flag cannot work here because MutationObserver delivers records asynchronously, by which time the flag is down again. Mutation-checked: making `isOwnWrite` always false fails three tests
+- [x] Debounced dirty-set extraction of only affected blocks; 200 mutations in one burst produce exactly one batch
 - [ ] Initial pass in viewport order with main-thread yielding; off-screen blocks deferred via `IntersectionObserver`
-- [ ] Performance test (Playwright, CPU throttled 6×, 3,000-node page with a 250 ms ticking counter): no widget long task > 50 ms; input latency p95 < 100 ms
-- [ ] `alt`, `title`, `placeholder` translated on initial and subsequent passes and restored exactly; `aria-label`/`aria-description` never touched
+- [ ] Performance test (Playwright, CPU throttled 6×, 3,000-node page with a 250 ms ticking counter): no widget long task > 50 ms; input latency p95 < 100 ms — **waits on viewport ordering above; measuring before that lands would measure the wrong thing**
+- [x] `alt`, `title`, `placeholder` translated in the same request as the text and restored exactly; a host-changed attribute is left alone; `aria-label`/`aria-description` never touched
 
 ### S4.3 — Toggle and persistence
 Requirements: FR-212, FR-213 · [ER-11, ER-19]

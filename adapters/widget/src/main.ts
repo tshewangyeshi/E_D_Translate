@@ -54,6 +54,11 @@ export async function boot(): Promise<Widget | null> {
   });
   document.body.appendChild(button);
 
+  // Watch from the start, not from the first translation: content added while
+  // the page is still in English must be known about, so it can be translated
+  // the moment the reader switches (FR-211).
+  widget.watch();
+
   if (savedPreference() === "dz") {
     // Wait for the host to finish rendering and settle before touching it, so
     // the first write cannot race a framework's hydration pass (ER-16).

@@ -18,17 +18,21 @@
 // every entry point is wrapped and every failure leaves the page in English.
 
 import {
+  applyAttribute,
   applyTranslation,
   clearLanguage,
   markLanguage,
   readSlots,
+  restoreAttribute,
   restoreOriginal,
   unchangedSinceWrite,
+  type AttributeState,
   type BlockState,
   type Registry,
 } from "./apply.js";
-import { extract, type Segment } from "./extract.js";
+import { extract, type AttributeUnit, type Extraction, type Segment } from "./extract.js";
 import { stripRenderArtefacts } from "./locale-dz.js";
+import { observe, type Observation } from "./observe.js";
 import {
   fetchConfig,
   translateBatch,
@@ -70,6 +74,10 @@ export class Widget {
   private pendingRetryDone = false;
   /** Blocks currently showing Dzongkha. Weak, so a removed block is collectable. */
   private translatedBlocks: Ref<Element>[] = [];
+  /** Translated attribute values, per element then per attribute (FR-113). */
+  private readonly attributes = new WeakMap<Element, Map<string, AttributeState>>();
+  private translatedAttributes: Ref<Element>[] = [];
+  private watching: Observation | null = null;
 
   constructor(
     private readonly api: ApiOptions,
@@ -125,11 +133,21 @@ export class Widget {
       state.translated = false;
     }
     this.translatedBlocks = [];
+
+    for (const ref of this.translatedAttributes) {
+      const element = ref.deref();
+      if (element === undefined || !element.isConnected) continue;
+      const byAttr = this.attributes.get(element);
+      if (byAttr === undefined) continue;
+      for (const [attr, state] of byAttr) restoreAttribute(element, attr, state);
+      this.attributes.delete(element);
+    }
+    this.translatedAttributes = [];
   }
 
-  private async pass(epoch: number, retry = false): Promise<void> {
-    const segments = this.extractSegments();
-    if (segments.length === 0) return;
+  private async pass(epoch: number, retry = false, roots?: readonly Element[]): Promise<void> {
+    const { segments, attributes } = this.extractUnits(roots);
+    if (segments.length === 0 && attributes.length === 0) return;
 
     const sent = new Map<string, { segment: Segment; slots: string[]; generation: number }>();
     const items = segments.map((segment, n) => {
@@ -144,6 +162,15 @@ export class Widget {
       };
     });
 
+    // Attribute units carry no inline markup, so they need no slots -- but they
+    // are translated in the same request, so alt text is not a second round trip.
+    const sentAttrs = new Map<string, { unit: AttributeUnit; value: string }>();
+    attributes.forEach((unit, n) => {
+      const id = `a${n}`;
+      sentAttrs.set(id, { unit, value: unit.text });
+      items.push({ id, text: unit.text, selectorTier: null, tierHint: null });
+    });
+
     const pending: string[] = [];
     for (let start = 0; start < items.length; start += MAX_SEGMENTS) {
       const batch = items.slice(start, start + MAX_SEGMENTS);
@@ -151,6 +178,11 @@ export class Widget {
       for (const [id, result] of results) {
         if (result.status === "pending_mt") pending.push(id);
         if (result.status !== "translated") continue; // English stays on the page
+        const attr = sentAttrs.get(id);
+        if (attr !== undefined) {
+          this.writeAttribute(attr.unit, attr.value, result.text, epoch);
+          continue;
+        }
         const record = sent.get(id);
         if (record === undefined) continue;
         this.write(record, epoch, result.text, result.origin);
@@ -194,6 +226,95 @@ export class Widget {
     markLanguage(segment.block, origin);
   }
 
+  /** Apply a translated attribute, unless the host changed it meanwhile. */
+  private writeAttribute(
+    unit: AttributeUnit,
+    valueWhenSent: string,
+    translated: string,
+    epoch: number,
+  ): void {
+    if (this.epoch !== epoch || this.showing !== "dz") return;
+    if (!applyAttribute(unit.element, unit.attr, translated, valueWhenSent)) return;
+    let byAttr = this.attributes.get(unit.element);
+    if (byAttr === undefined) {
+      byAttr = new Map<string, AttributeState>();
+      this.attributes.set(unit.element, byAttr);
+    }
+    byAttr.set(unit.attr, {
+      original: valueWhenSent,
+      lastWritten: stripRenderArtefacts(unit.element.getAttribute(unit.attr) ?? ""),
+    });
+    this.translatedAttributes.push(makeRef(unit.element));
+  }
+
+  /**
+   * Start watching for content that arrives or changes after load (FR-211).
+   *
+   * Safe to call once configuration has loaded; stops with `unwatch()`.
+   */
+  watch(debounceMs?: number): void {
+    if (this.watching !== null || this.config === null) return;
+    this.watching = observe({
+      root: this.root(),
+      ...(debounceMs === undefined ? {} : { debounceMs }),
+      blockOf: (node) => this.blockOf(node),
+      isOwnWrite: (node) => this.isOwnWrite(node),
+      onDirty: (blocks) => this.onDirty(blocks),
+    });
+  }
+
+  unwatch(): void {
+    this.watching?.stop();
+    this.watching = null;
+  }
+
+  /** Report pending observer work immediately. Tests only. */
+  flush(): void {
+    this.watching?.flush();
+  }
+
+  /** The nearest element we would treat as a translation unit. */
+  private blockOf(node: Node): Element | null {
+    const element =
+      node.nodeType === 1 ? (node as Element) : (node.parentElement ?? null);
+    if (element === null || !element.isConnected) return null;
+    if (element.closest("[data-dz-control]") !== null) return null; // our own UI
+    // A known block wins; otherwise the element itself is the unit and
+    // extraction will find the real block inside it.
+    for (let at: Element | null = element; at !== null; at = at.parentElement) {
+      if (this.registry.has(at)) return at;
+    }
+    return element;
+  }
+
+  /** True when this node still holds exactly what the widget last wrote to it. */
+  private isOwnWrite(node: Text): boolean {
+    const block = this.blockOf(node);
+    if (block === null) return false;
+    const state = this.registry.get(block);
+    if (state === undefined || !state.translated) return false;
+    return unchangedSinceWrite(state.segment, state.lastWritten);
+  }
+
+  /**
+   * Handle blocks the host added or changed.
+   *
+   * A block we had translated and that no longer matches what we wrote has been
+   * rewritten by the host. Its English is now whatever the host just put there,
+   * so the remembered original is replaced rather than kept -- otherwise
+   * toggling back would restore text the host has moved on from (FR-212).
+   */
+  private onDirty(blocks: Set<Element>): void {
+    const affected: Element[] = [];
+    for (const block of blocks) {
+      if (!block.isConnected) continue;
+      this.registry.delete(block); // its slots and original are both stale now
+      affected.push(block);
+    }
+    if (affected.length === 0 || this.showing !== "dz") return;
+    void this.pass(this.epoch, true, affected);
+  }
+
   private stateFor(segment: Segment): BlockState {
     const existing = this.registry.get(segment.block);
     if (existing !== undefined) return existing;
@@ -208,14 +329,32 @@ export class Widget {
     return state;
   }
 
-  private extractSegments(): Segment[] {
+  /**
+   * Extract from the whole page, or from just the blocks that changed.
+   *
+   * A translated block carries `lang="dz…"` and extraction skips those by
+   * design (FR-112), so a block being re-examined has its marker cleared first.
+   * Otherwise a host edit inside translated content would be invisible.
+   */
+  private extractUnits(roots?: readonly Element[]): Extraction {
+    const options = {
+      tier1Selectors: this.config?.tier1Selectors ?? [],
+      privateSelectors: this.config?.privateSelectors ?? [],
+    };
     try {
-      return extract(this.root(), {
-        tier1Selectors: this.config?.tier1Selectors ?? [],
-        privateSelectors: this.config?.privateSelectors ?? [],
-      }).segments;
+      if (roots === undefined) return extract(this.root(), options);
+      const segments: Segment[] = [];
+      const attributes: AttributeUnit[] = [];
+      for (const block of roots) {
+        if (!block.isConnected) continue; // removed while we were debouncing
+        clearLanguage(block);
+        const found = extract(block, options);
+        segments.push(...found.segments);
+        attributes.push(...found.attributes);
+      }
+      return { segments, attributes };
     } catch {
-      return [];
+      return { segments: [], attributes: [] };
     }
   }
 }

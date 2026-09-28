@@ -5,7 +5,7 @@
 // Plain createElement rather than JSX: no transform step, so what the browser
 // runs is what is written here.
 
-export function tree(h, content, counter = 0, intro = content.intro) {
+export function tree(h, content, counter = 0, intro = content.intro, extra = []) {
   return h("main", null, [
     h("h1", { key: "h" }, content.heading),
     // MIXED content: a text node, an element, another text node. This shape is
@@ -21,5 +21,7 @@ export function tree(h, content, counter = 0, intro = content.intro) {
     h("p", { key: "f" }, content.fee),
     h("p", { key: "l", className: "legal" }, content.legal),
     h("p", { key: "c", id: "counter" }, `Counter: ${counter}`),
+    // Blocks the host adds after load, the S4.2 case.
+    ...extra.map((text, n) => h("p", { key: `x${n}`, className: "added" }, text)),
   ]);
 }

@@ -123,3 +123,30 @@ test("fr216_no_control_is_offered_when_configuration_fails", async ({ page }) =>
   await expect(page.locator("[data-dz-control]")).toHaveCount(0);
   await expect(page.locator("#intro")).toContainText("Apply to renew your passport online.");
 });
+
+// S4.2 — content the host adds after the first pass must be translated too,
+// and the widget must not treat its own writes as new host content.
+for (const fixture of FIXTURES) {
+  test(`fr211_translates_content_added_later_in_${fixture.replace("-", "_")}`, async ({ page }) => {
+    const watch = watchConsole(page);
+    await page.goto(`${base}/${fixture}`);
+    await page.waitForFunction(
+      () => typeof (window as never as { __addBlock?: unknown }).__addBlock === "function",
+    );
+    await page.locator("[data-dz-control]").click();
+    await expect(page.locator("#intro")).toContainText("DZ:");
+
+    // The host renders a new block while Dzongkha is displayed.
+    await page.evaluate(() =>
+      (window as never as { __addBlock: (t: string) => void }).__addBlock("Added after load."),
+    );
+    await expect(page.locator("p.added")).toHaveText("DZ:Added after load.");
+    expect(watch.problems, "problems after the host added content").toEqual([]);
+
+    // And the widget must not have re-translated its own output: a second
+    // "DZ:" prefix anywhere would mean the observer fed the page back to itself.
+    await page.waitForTimeout(400);
+    await expect(page.locator("p.added")).not.toContainText("DZ:DZ:");
+    await expect(page.locator("#intro")).not.toContainText("DZ:DZ:");
+  });
+}
