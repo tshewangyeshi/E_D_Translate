@@ -1,0 +1,275 @@
+{
+ "_comment": "Second held-out set of PILOT sentences for masker recall (S1.3, FR-140), labelled by hand on 2026-10-05 after the fixes driven by labelled-pilot.json and before the masker was run on it. Unbiased result then: 31/33 (93.9%); misses: a month and year ('April 2019') and an exchange list ('00975-02-(...)'). Both were then fixed, so this set is no longer unbiased: the next honest figure needs a new set labelled from the pilot snapshots. Phone numbers synthetic.",
+ "items": [
+  {
+   "split": "heldout",
+   "text": "3. Someone who had not been guarantor for a more than 3 birth registrations",
+   "entities": [
+    {
+     "value": "3",
+     "kind": "NUM"
+    },
+    {
+     "value": "3",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Registration fee of Nu. 3,000/- per category of work classification",
+   "entities": [
+    {
+     "value": "Nu. 3,000",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "The parties need to submit the above mentioned documents in the respective courts between 9-9:30 am",
+   "entities": [
+    {
+     "value": "9",
+     "kind": "NUM"
+    },
+    {
+     "value": "9:30 am",
+     "kind": "DATE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "be liable of Nu. 100/day as late renewal penalty.",
+   "entities": [
+    {
+     "value": "Nu. 100",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "The recent passport size photos in full National Dress. Patient -2Copies, Donor- 2Copies during date of appointment.",
+   "entities": [
+    {
+     "value": "2",
+     "kind": "NUM"
+    },
+    {
+     "value": "2",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "TAT of electrocardiogram (ECG) will be provided by April 2019 because the Quality Assurance and Standardization Division (QASD) will do a survey to find out the baseline for the standard TAT.",
+   "entities": [
+    {
+     "value": "April 2019",
+     "kind": "DATE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "EPABX No: 00975-02-(300011/300012/300013/300014/300015).",
+   "entities": [
+    {
+     "value": "00975-02",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300011",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300012",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300013",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300014",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300015",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "A. Registration fee for upgrade to Large class Nu. 15,000/- per category",
+   "entities": [
+    {
+     "value": "Nu. 15,000",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Clearance Certificate, 7 days before the expiry of validity date. For example, if the expiry",
+   "entities": [
+    {
+     "value": "7",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "l. If approved, an applicant will get SMS with a link to make online payment from the www.citizenservices.gov.bt",
+   "entities": [
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "3 .How to Apply for Online Service:",
+   "entities": [
+    {
+     "value": "3",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Visit www.citizenservices.gov.bt and go to Business Services and log in using your user ID and password. Under Online Business Services, click on Sl. # 8 Application for",
+   "entities": [
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    },
+    {
+     "value": "8",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Post Box: 1787",
+   "entities": [
+    {
+     "value": "1787",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "b. Please read the Guidelines for Registration of Cottage Scale Industries 2021 before online application.",
+   "entities": [
+    {
+     "value": "2021",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "All applicants for a Passport are requested to submit their applications online through the G2C services system (www.citizenservices.gov.bt).",
+   "entities": [
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "1. Diplomatic / Official Passport Not applicable",
+   "entities": [
+    {
+     "value": "1",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Visit www.citizenservices.gov.bt and go to Business Services. Answer “YES” for Bhutanese and Sign In",
+   "entities": [
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "TURN AROUND TIME (TAT):Issue the letter of approval within 5 working days from the date of approval by the Project Approval Committee.",
+   "entities": [
+    {
+     "value": "5",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "- Nu. 100 for Renewal",
+   "entities": [
+    {
+     "value": "Nu. 100",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "4000 cft (log form) from NRDCL depot or 18 Drashing (standing tree)",
+   "entities": [
+    {
+     "value": "4000",
+     "kind": "NUM"
+    },
+    {
+     "value": "18",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "More than 100 numbers of fencing posts at commercial royalty rate.",
+   "entities": [
+    {
+     "value": "100",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "2.To establish",
+   "entities": [
+    {
+     "value": "2",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "1. General",
+   "entities": [
+    {
+     "value": "1",
+     "kind": "NUM"
+    }
+   ]
+  }
+ ]
+}

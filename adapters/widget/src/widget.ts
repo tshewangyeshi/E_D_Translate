@@ -59,6 +59,53 @@ function makeRef<T extends object>(value: T): Ref<T> {
   return typeof WeakRef === "function" ? new WeakRef(value) : { deref: () => value };
 }
 
+/**
+ * Elements the widget has written to, held weakly, each once (S4.3).
+ *
+ * The lists used to empty only when the reader toggled back. With Dzongkha on
+ * across an SPA's route changes they grew with every block ever translated --
+ * the nodes were collectable, the list entries were not, and a host change
+ * scanned them all. Now an element is listed once however often it is
+ * re-translated, and entries whose element has been collected are dropped as
+ * the list grows. A detached element that is still alive stays listed: a
+ * framework may put it back (a kept-alive tab), and toggling back must still
+ * restore it.
+ */
+export class RefList<T extends object> {
+  private refs: Ref<T>[] = [];
+  private members = new WeakSet<T>();
+  private compactAt = 64;
+
+  add(value: T): void {
+    if (this.members.has(value)) return;
+    this.members.add(value);
+    this.refs.push(makeRef(value));
+    if (this.refs.length >= this.compactAt) {
+      this.refs = this.refs.filter((ref) => ref.deref() !== undefined);
+      this.compactAt = Math.max(64, this.refs.length * 2); // amortised: rare, and linear
+    }
+  }
+
+  /** The elements still alive, in the order they were added. */
+  *live(): Generator<T> {
+    for (const ref of this.refs) {
+      const value = ref.deref();
+      if (value !== undefined) yield value;
+    }
+  }
+
+  clear(): void {
+    this.refs = [];
+    this.members = new WeakSet<T>();
+    this.compactAt = 64;
+  }
+
+  /** Entries held, collected ones included until the next compaction. */
+  get size(): number {
+    return this.refs.length;
+  }
+}
+
 /** Blocks this far outside the viewport are treated as about to be read. */
 const VIEWPORT_MARGIN_PX = 300;
 
@@ -98,10 +145,10 @@ export class Widget {
   private epoch = 0;
   private pendingRetryDone = false;
   /** Blocks currently showing Dzongkha. Weak, so a removed block is collectable. */
-  private translatedBlocks: Ref<Element>[] = [];
+  private readonly translatedBlocks = new RefList<Element>();
   /** Translated attribute values, per element then per attribute (FR-113). */
   private readonly attributes = new WeakMap<Element, Map<string, AttributeState>>();
-  private translatedAttributes: Ref<Element>[] = [];
+  private readonly translatedAttributes = new RefList<Element>();
   private watching: Observation | null = null;
   private viewportObserver: IntersectionObserver | null = null;
   /**
@@ -153,9 +200,7 @@ export class Widget {
   toggleBack(): void {
     this.showing = "en";
     this.epoch += 1;
-    for (const ref of this.translatedBlocks) {
-      const block = ref.deref();
-      if (block === undefined) continue; // the host removed it; nothing to restore
+    for (const block of this.translatedBlocks.live()) {
       const state = this.registry.get(block);
       if (state === undefined || !state.translated) continue;
       // Only restore if the block still holds what we wrote. If the host
@@ -166,17 +211,24 @@ export class Widget {
       clearLanguage(block);
       state.translated = false;
     }
-    this.translatedBlocks = [];
+    this.translatedBlocks.clear();
 
-    for (const ref of this.translatedAttributes) {
-      const element = ref.deref();
-      if (element === undefined || !element.isConnected) continue;
+    for (const element of this.translatedAttributes.live()) {
+      if (!element.isConnected) continue;
       const byAttr = this.attributes.get(element);
       if (byAttr === undefined) continue;
       for (const [attr, state] of byAttr) restoreAttribute(element, attr, state);
       this.attributes.delete(element);
     }
-    this.translatedAttributes = [];
+    this.translatedAttributes.clear();
+  }
+
+  /** How much per-element state the widget holds. Tests only (S4.3). */
+  stateSize(): { translatedBlocks: number; translatedAttributes: number } {
+    return {
+      translatedBlocks: this.translatedBlocks.size,
+      translatedAttributes: this.translatedAttributes.size,
+    };
   }
 
   /**
@@ -321,7 +373,7 @@ export class Widget {
     state.lastWritten = readSlots(segment).map(stripForCompare);
     state.translated = true;
     if (segmentKey !== undefined) state.segmentKey = segmentKey;
-    this.translatedBlocks.push(makeRef(segment.block));
+    this.translatedBlocks.add(segment.block);
     markLanguage(segment.block, origin);
     if (origin !== "human") this.onMachineOutput?.();
   }
@@ -346,7 +398,7 @@ export class Widget {
       original: valueWhenSent,
       lastWritten: stripRenderArtefacts(unit.element.getAttribute(unit.attr) ?? ""),
     });
-    this.translatedAttributes.push(makeRef(unit.element));
+    this.translatedAttributes.add(unit.element);
   }
 
   /**
@@ -425,10 +477,10 @@ export class Widget {
 
   /** True once any block on the page is showing machine output (FR-520). */
   get showingMachineOutput(): boolean {
-    return this.translatedBlocks.some((ref) => {
-      const block = ref.deref();
-      return block !== undefined && block.getAttribute("lang") === "dz-x-mtfrom-en";
-    });
+    for (const block of this.translatedBlocks.live()) {
+      if (block.getAttribute("lang") === "dz-x-mtfrom-en") return true;
+    }
+    return false;
   }
 
   /** The reportable key for a block, if the widget translated it (FR-430). */

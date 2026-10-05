@@ -11,6 +11,8 @@ function App() {
     window.__rerender = () => setCounter((n) => n + 1);
     window.__setIntro = (text) => setIntro(text);
     window.__addBlock = (text) => setExtra((list) => [...list, text]);
+    // An SPA route change: every added block goes, twenty new ones arrive (S4.3).
+    window.__route = (n) => setExtra(Array.from({ length: 20 }, (_, i) => `Route ${n}, block ${i}.`));
   }, []);
   return tree(h, CONTENT, counter, intro, extra);
 }

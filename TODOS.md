@@ -136,6 +136,8 @@
 
 ### PostgreSQL connection pool
 
+**Done 2026-10-05:** `PooledConnection` over psycopg_pool, store work off the event loop; NFR-100 still to be re-measured against real PostgreSQL.
+
 **What:** Replace the single connection per process in `orchestrator/wiring.py` with a `psycopg_pool` pool, and run store calls off the event loop (or switch to psycopg's async API).
 
 **Why:** Correct today but serialised: every request in an API process shares one connection and blocks the event loop during database I/O. Fine for tests, not for pilot traffic.

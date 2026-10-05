@@ -363,8 +363,13 @@ def test_nfr410_a_lost_database_connection_is_reopened(
     assert _translate_as_three_clients(c, "Apply online today")["status"] == "translated"
     c.store.cache.inner.client.flushdb()  # make the next request go to PostgreSQL
 
-    # The server ends the connection, as a restart or failover would.
-    pg_conn.execute("SELECT pg_terminate_backend(%s)", (c.conn.info.backend_pid,))
+    # The server ends every connection the service holds, as a restart or
+    # failover would: the whole pool, not one socket.
+    killed = pg_conn.execute(
+        "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity"
+        " WHERE datname = current_database() AND pid <> pg_backend_pid()"
+    ).fetchone()[0]
+    assert killed >= 1
 
     def ask() -> Any:
         return client.post(
@@ -373,7 +378,6 @@ def test_nfr410_a_lost_database_connection_is_reopened(
 
     assert ask().status_code == 200  # English at worst, never an error (NFR-410)
     assert ask().json()["segments"][0]["status"] == "translated"
-    assert c.conn.reconnects == 1
 
 
 def test_fr611_the_running_service_exports_queue_and_review_gauges(

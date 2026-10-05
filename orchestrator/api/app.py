@@ -26,21 +26,21 @@ import json
 import logging
 import secrets
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from orchestrator.api.ratelimit import RateLimiter, client_bucket
+from orchestrator.api.ratelimit import RateLimiter, SharedRateLimiter, client_bucket
 from orchestrator.governance.paths import redact_path
 from orchestrator.governance.sites import SiteRegistry
 from orchestrator.ops import health as health_checks
 from orchestrator.ops import metrics as ops_metrics
-from orchestrator.service.translate import SegmentIn, Status, TranslateService
+from orchestrator.service.translate import SegmentIn, SegmentOut, Status, TranslateService
 from orchestrator.store.reports import (
     MAX_COMMENT_CHARS,
     REASONS,
@@ -102,29 +102,98 @@ class TranslateRequest(BaseModel):
     segments: list[SegmentRequest] = Field(max_length=MAX_SEGMENTS)
 
 
+class Limiter(Protocol):
+    """A per-key rate limiter: in-process or shared through Redis (ratelimit.py)."""
+
+    def allow(self, key: str) -> bool: ...
+    def retry_after_seconds(self) -> int: ...
+
+
 @dataclass
 class ClientHasher:
-    """Salted, daily-rotated client hash (NFR-304). The salt never leaves memory.
+    """Salted, daily-rotated client hash (NFR-304). The salt is never stored.
 
     The hash names its day (``YYYY-MM-DD:<hex>``) so the distinct-client
     counter files it under the day whose salt made it, even if the request
     finishes after midnight.
+
+    With a ``key`` (``DZWEB_CLIENT_HASH_KEY``), each day's salt is derived from
+    it, so every API process hashes a client the same way and the N-distinct-
+    clients rule holds across replicas (S3.4). Without one, each process draws
+    its own random salt: right for one process, an overcount for several.
+    Either way the salt exists only in memory, and one day's hashes cannot be
+    linked to another's without the key.
     """
 
     today: Callable[[], date] = lambda: datetime.now(UTC).date()
+    key: bytes = field(default=b"", repr=False)
     _day: date | None = None
     _salt: bytes = field(default=b"", repr=False)
 
     def hash(self, client: str) -> str:
         day = self.today()
         if day != self._day:
-            self._day, self._salt = day, secrets.token_bytes(32)
+            self._day, self._salt = day, self._salt_for(day)
         digest = hmac.new(self._salt, client.encode("utf-8"), hashlib.sha256).hexdigest()
         return f"{day.isoformat()}:{digest}"
+
+    def _salt_for(self, day: date) -> bytes:
+        if self.key:
+            return hmac.new(
+                self.key, b"client-salt:" + day.isoformat().encode(), hashlib.sha256
+            ).digest()
+        return secrets.token_bytes(32)
+
+
+@dataclass(frozen=True)
+class Limit:
+    per_minute: float
+    burst: float
+
+    def local(self) -> RateLimiter:
+        return RateLimiter(per_minute=self.per_minute, burst=self.burst)
+
+
+#: Requests per origin, and per client, on the public routes (FR-103).
+ORIGIN_LIMIT = Limit(per_minute=6000.0, burst=600.0)
+CLIENT_LIMIT = Limit(per_minute=120.0, burst=30.0)
+#: FR-432: 10 reports an hour per client. A burst of 10 so a reader who
+#: spots several bad segments on one page can report them all at once.
+FEEDBACK_LIMIT = Limit(per_minute=10 / 60, burst=10.0)
+
+
+def shared_limiters(client: Any, hasher: ClientHasher) -> dict[str, Limiter]:
+    """The three limiters, shared across replicas through Redis (S2.1).
+
+    Keys are stored only as salted hashes (``hasher``): no client address is
+    written down (NFR-303). Each falls back to an in-process bucket if Redis fails.
+    """
+
+    def make(name: str, limit: Limit) -> Limiter:
+        return SharedRateLimiter(
+            client, name, per_minute=limit.per_minute, burst=limit.burst, key_hash=hasher.hash
+        )
+
+    return {
+        "origin_limiter": make("origin", ORIGIN_LIMIT),
+        "client_limiter": make("client", CLIENT_LIMIT),
+        "feedback_limiter": make("feedback", FEEDBACK_LIMIT),
+    }
 
 
 def _error(status: int, message: str, headers: dict[str, str] | None = None) -> JSONResponse:
     return JSONResponse({"error": message}, status_code=status, headers=headers)
+
+
+def batch_tag_integrity(results: Sequence[SegmentOut]) -> str:
+    """The log line's ` tag_integrity=0.95`: of this batch's model outputs, the
+    share whose tags survived (S1.5, NFR-200). Empty when the model was not asked.
+    """
+    checked = [r for r in results if r.model_checked]
+    if not checked:
+        return ""
+    kept = sum(1 for r in checked if r.status is not Status.TAG_FALLBACK)
+    return f" tag_integrity={kept / len(checked):.2f}"
 
 
 def _cors(origin: str) -> dict[str, str]:
@@ -149,22 +218,20 @@ def create_app(
     service: TranslateService,
     sites: SiteRegistry,
     termbase_version: str,
-    origin_limiter: RateLimiter | None = None,
-    client_limiter: RateLimiter | None = None,
+    origin_limiter: Limiter | None = None,
+    client_limiter: Limiter | None = None,
     hasher: ClientHasher | None = None,
     reports: ReportStore | None = None,
-    feedback_limiter: RateLimiter | None = None,
+    feedback_limiter: Limiter | None = None,
     health: Mapping[str, health_checks.Probe] | None = None,
     gauges: ops_metrics.Gauges | None = None,
     ops_token: str | None = None,
 ) -> FastAPI:
     app = FastAPI(title="dzweb orchestrator", version="0.1", docs_url=None, redoc_url=None)
-    origin_limiter = origin_limiter or RateLimiter(per_minute=6000, burst=600)
-    client_limiter = client_limiter or RateLimiter(per_minute=120, burst=30)
+    origin_limiter = origin_limiter or ORIGIN_LIMIT.local()
+    client_limiter = client_limiter or CLIENT_LIMIT.local()
     hasher = hasher or ClientHasher()
-    # FR-432: 10 reports an hour per client. A burst of 10 so a reader who
-    # spots several bad segments on one page can report them all at once.
-    feedback_limiter = feedback_limiter or RateLimiter(per_minute=10 / 60, burst=10)
+    feedback_limiter = feedback_limiter or FEEDBACK_LIMIT.local()
     # In-memory checks answer inline; anything doing I/O -- the database and
     # cache from the wiring, and the queue -- runs bounded, off the loop (FR-610).
     checker = health_checks.HealthChecker(
@@ -315,10 +382,17 @@ def create_app(
             reason=reason,
             comment=mask_comment(body.comment),
         )
-        try:
+
+        def store() -> bool:
             if is_saturated(reports, report, datetime.now(UTC)):
-                return dropped("saturated")
+                return False
             reports.record_report(report)
+            return True
+
+        try:
+            # Off the event loop, like the translate path's store work (S2.4).
+            if not await asyncio.to_thread(store):
+                return dropped("saturated")
         except Exception as err:  # noqa: BLE001 - a store fault must look like any other outcome
             return dropped(f"store_error:{type(err).__name__}")
         log.info("feedback stored site=%s reason=%s", site.site_id, reason)
@@ -392,11 +466,12 @@ def create_app(
         for result in results:
             counts[result.status.value] = counts.get(result.status.value, 0) + 1
         log.info(
-            "translate site=%s path=%s segments=%d %s",
+            "translate site=%s path=%s segments=%d %s%s",
             site.site_id,
             redact_path(body.path),
             len(results),
             " ".join(f"{name}={n}" for name, n in sorted(counts.items())),
+            batch_tag_integrity(results),
         )
         # Requests that reached the service, whatever it answered: refusals
         # (403, 413, 429) cost nothing and would flatter the figure (FR-611).

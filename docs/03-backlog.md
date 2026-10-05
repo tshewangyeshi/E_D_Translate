@@ -79,7 +79,7 @@ Requirements: FR-120, FR-121, FR-124 · [ER-2, ER-10]
 - [x] Parses wire markers `⟦N⟧…⟦/N⟧`, `⟦vN/⟧`; rejects unescaped delimiters, unbalanced or unknown markers with a stable cause (mapping to `tag_fallback` lands with the API, S2.1); **client input may not contain entity tokens**
 - [x] Round-trip without translation (identity model) reproduces the segment byte-for-byte (Hypothesis property test)
 - [x] Segments over the model limit split at shad or terminal punctuation, never inside a placeholder
-- [ ] Converts wire markers ↔ the model token format chosen in S0.1 — *two candidates implemented (`wire`, `xml`); final choice waits for S0.1*
+- [x] Converts wire markers ↔ the model token format chosen in S0.1 — *two candidates implemented (`wire`, `xml`); final choice waits for S0.1* — *xml adopted by S0.1 (2026-10-05): `DEFAULT_MODEL_FORMAT`, decoded leniently*
 - [x] Passes the shared extraction fixtures
 *gstack:* `/spec` → implement → `/review`
 
@@ -95,7 +95,7 @@ Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
 - [x] All masks restore exactly from **the current request's** entity map; output entities are byte-identical to input
 - [x] Hypothesis property tests: entity-rich sentences mask and restore byte-identical; any digit run in any script is masked
 - [x] Recall tool (`tools/masker_recall.py`, in `make check`): 100% on a synthetic labelled set with held-out split
-- [ ] Masker recall on **hand-labelled pilot snapshots** with a held-out set — *waits for Sprint 0 snapshots (S0.1)*
+- [x] Masker recall on **hand-labelled pilot snapshots** with a held-out set — *waits for Sprint 0 snapshots (S0.1)* — *`labelled-pilot.json` (71 real sentences, 130 entities) and `labelled-pilot-fresh.json` (23, 33), in `make check`. Unbiased first readings: 78% held-out, then 94% on a fresh set; gaps fixed (landlines, 00975, times, month-year, lowercase nu., glued www.)*
 - [x] **FR-144 (proposed):** amounts, dates, percentages and counts translated by the model, values checked in any script (`DZWEB_NUMBERS`, default `model`); phone numbers a masked kind of their own (`PHONE`); bare `www.` addresses masked as `URL` (`tests/orchestrator/test_numbers.py`) — *awaits SRS sign-off*
 - [x] Values after a label ("Email ID: …") or in brackets at the end of a piece are not sent to the model; only the words are (`orchestrator/service/model_call.py`)
 - [x] Each piece is sent sentence by sentence (abbreviations, initials and list numbers do not split); 262 of 264 pilot segments translate (99.2%)
@@ -106,18 +106,18 @@ Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
 **As** a developer, **I need** a model mock that misbehaves on purpose, **so that** restoration and validation are tested against realistic failure rather than a cooperative stub.
 Requirements: supports FR-122, FR-123, FR-141
 - [x] Mock modes: well-behaved, drops placeholders, duplicates placeholders, reorders placeholders, **invents placeholders, truncates tokens, converts digits to Tibetan, invents numbers**, mangles mask tokens, returns empty, times out, returns 503 (`orchestrator/testing/mock_nmt.py`)
-- [ ] Mode mix and rates calibrated from S0.1 recordings — *waits for WSO2 access*
+- [x] Mode mix and rates calibrated from S0.1 recordings — *waits for WSO2 access* — *`CALIBRATED_MODES` from the xml recordings; a test recomputes it from `tests/fixtures/mt-replay`*
 - [x] Deterministic under a seed
 - [x] Used by default in unit tests; real endpoint only in integration tests
 *Build this before S1.5.*
 
 ### S1.5 — Restoration and tag validation
 Requirements: FR-122, FR-123 · Gate: NFR-200 · [ER-2, ER-10]
-- [ ] Placeholder multiset **and order** in output are compared to input by the same shared validator as entities; mismatch records a tag-integrity failure
-- [ ] **Widget responses:** on mismatch the segment returns `tag_fallback` with source text, and the widget keeps the block English (no DOM restructuring, FR-210)
-- [ ] **Proxy/CMS/html responses:** formatting collapse produces valid markup with the segment's formatting applied to the whole
-- [ ] Malformed markup is never emitted, under any mock mode
-- [ ] Tag integrity rate is computed and exposed per batch
+- [x] Placeholder multiset **and order** in output are compared to input by the same shared validator as entities; mismatch records a tag-integrity failure — *`check_tags` on the shared `validate`; `tests/orchestrator/gates/test_tag_gate.py`*
+- [x] **Widget responses:** on mismatch the segment returns `tag_fallback` with source text, and the widget keeps the block English (no DOM restructuring, FR-210) — *and the widget refuses mismatched markers even when marked translated (`widget.test.ts`)*
+- [x] **Proxy/CMS/html responses:** formatting collapse produces valid markup with the segment's formatting applied to the whole — *`collapse_formatting` (tags.py); `translate(markup=True)` serves it, never stores it; the `/v1/translate/html` route itself is S8.0c*
+- [x] Malformed markup is never emitted, under any mock mode — *NFR-200 gate: 10,000 seeded runs, every mode, both formats; mutation-checked*
+- [x] Tag integrity rate is computed and exposed per batch — *`tag_integrity=` on each request's log line, and `dzweb_tag_integrity_ratio`*
 *Blocked by the S0.1 gate.* *gstack:* `/spec` → implement → `/review` → `/codex` (if policy allows)
 
 ### S1.6 — Glossary substitution
@@ -163,8 +163,8 @@ Requirements: FR-100, NFR-100, NFR-412 · [ER-3, ER-O4, ER-O5, ER-O7, ER-O9, ER-
 - [x] Tier resolution: strictest of site default, request hint and matched selector; a request cannot lower the tier (S3.1 adds server-side path rules)
 - [x] Nothing is sent to MT or stored until N distinct clients have seen a Tier 2 segment (NFR-304)
 - [x] Real WSO2 translator client — `orchestrator/upstream/wso2.py`, selected with `DZWEB_TRANSLATOR=wso2`. OAuth2 client credentials, token reused until a minute before expiry and renewed once on 401; one text per call, bounded concurrency; every failure an `UpstreamError`, so the page stays English (NFR-410). The API reports no model version, so `DZWEB_MODEL_VERSION` pins it for the cache keys (FR-150). Credentials only in the environment or the git-ignored `.env`; never logged. Probed 2026-10-05: 0.26–0.84 s a call, token lifetime 1 h (`tools/wso2_probe.py`)
-- [ ] PostgreSQL job queue and worker — *S2.4; an in-memory queue implements the interface now*
-- [ ] Rate limits shared across API replicas — *in-process for now; Redis-backed when more than one replica runs*
+- [x] PostgreSQL job queue and worker — *S2.4; an in-memory queue implements the interface now* — *`PostgresJobQueue` and `run_worker`, wired in `build()` (S2.4)*
+- [x] Rate limits shared across API replicas — *in-process for now; Redis-backed when more than one replica runs* — *`SharedRateLimiter`: Redis buckets under salted hashes, per-replica fallback (`test_replicas.py`)*
 
 ### S2.3 — Health, metrics, gateway publication
 Requirements: FR-600, FR-610, FR-611 · [ER-O4]
@@ -188,7 +188,7 @@ Requirements: NFR-412, FR-155, FR-156, NFR-413 · [ER-3, ER-O7, ER-21]
 - [x] Pre-warm: `npm run build && node scripts/export-segments.mjs` runs the real widget extractor over snapshots; `python -m orchestrator.ops.prewarm` queues Tier 2 segments at pre-warm priority, skips duplicates and already-translated keys, and lists Tier 1 segments for the S7.0 human review. *Needs the pilot snapshots (S0.1).*
 - [x] Runnable services with production wiring (`orchestrator/wiring.py`): `uvicorn orchestrator.main:create --factory`, `python -m orchestrator.queue.run_worker`; the mock translator requires an explicit opt-in so fake output can never be deployed by accident
 - [~] Rate-capped re-warm after glossary and model invalidations: **re-warm happens through normal misses**, capped by the live quota and the bounded queue. A proactive re-warm job cannot be rebuilt from the TM, because stored sources already carry the old term placeholders; re-running pre-warm on the snapshots is the explicit route.
-- [ ] Connection pool for PostgreSQL — *wiring uses one connection per process: correct, but requests are serialised on it; must be pooled before the pilot (TODOS.md)*
+- [x] Connection pool for PostgreSQL — *wiring uses one connection per process: correct, but requests are serialised on it; must be pooled before the pilot (TODOS.md)* — *`PooledConnection` over psycopg_pool (`DZWEB_PG_POOL_SIZE`), store work off the event loop (`test_pool.py`, `test_offloop.py`)*
 
 ---
 
@@ -228,7 +228,7 @@ Requirements: NFR-304, NFR-305, NFR-303 · [ER-O3]
 - [ ] Pilot enrols public, unauthenticated pages only — **enrolment policy, not code.** `data-dz-private` is the technical backstop if a signed-in page is enrolled by mistake; it does not replace the enrolment decision
 - [x] Widget loads nothing on pages marked `data-dz-private` (checked on `<html>` and `<body>`; it does not even request configuration); `data-dz-skip` and configured `private_selectors` regions, and all their descendants and attributes, are never extracted
 - [x] Server normalises numeric and ID-like path segments to `:id` before storage or logging — `redact_path`, kept separate from the tier-matching normaliser because rules must match the real path. Deliberately eager: `/legal/2026-budget` redacts too, which costs a vaguer log line and never a leaked identifier
-- [ ] Tier 2 segments are neither persisted nor sent to MT until seen from ≥N distinct clients (proposed 3; salted, daily-rotated client hash); test: a one-off string never reaches the WSO2 mock — **holds for one API process; open for several.** Tests (`tests/orchestrator/test_distinct_clients.py`) show a one-off string reaches neither the model, the queue, the TM nor the cache. *Fixed 2026-09-29, twice:* a request that crossed midnight was hashed with one day's salt and counted in the next day's set, so the hash now carries its day; and before that, the counter kept one set per segment and refreshed its expiry on every sighting, so a citizen returning on three mornings was counted as three clients; counts are now scoped to the UTC day the salt lives for. ***Still open:*** *each process draws its own salt, so one citizen served by three replicas, or across three restarts in a day, is counted as three. Recorded as a strict `xfail` test and in TODOS.md; the fix needs a decision on where a shared salt may live*
+- [x] Tier 2 segments are neither persisted nor sent to MT until seen from ≥N distinct clients (proposed 3; salted, daily-rotated client hash); test: a one-off string never reaches the WSO2 mock — **holds for one API process; open for several.** Tests (`tests/orchestrator/test_distinct_clients.py`) show a one-off string reaches neither the model, the queue, the TM nor the cache. *Fixed 2026-09-29, twice:* a request that crossed midnight was hashed with one day's salt and counted in the next day's set, so the hash now carries its day; and before that, the counter kept one set per segment and refreshed its expiry on every sighting, so a citizen returning on three mornings was counted as three clients; counts are now scoped to the UTC day the salt lives for. ***Still open:*** *each process draws its own salt, so one citizen served by three replicas, or across three restarts in a day, is counted as three. Recorded as a strict `xfail` test and in TODOS.md; the fix needs a decision on where a shared salt may live* — *now across processes too: every replica derives the day's salt from `DZWEB_CLIENT_HASH_KEY` (`test_replicas.py`)*
 - [x] Unapproved machine translations expire after the retention period — `python -m orchestrator.ops.retention --days 90`, with `--dry-run` to see the blast radius first. Invalidates rather than deletes, because `translation_version` is immutable by trigger so what was served stays explicable. Residual: a row can still be served from the Redis cache until its own 7-day TTL runs out
 - [x] Logs contain keys, counts and the redacted path, never segment text or client address. One request log line, asserted by behaviour rather than by inspection: a test feeds person-shaped text through the live and the failing path and greps every emitted record. Mutation-checked — adding one logging call that includes segment text fails both
 *gstack:* `/cso` is a gate on this story.
@@ -273,16 +273,16 @@ Requirements: FR-113, FR-211 · [ER-11, ER-18, ER-20]
 
 ### S4.3 — Toggle and persistence
 Requirements: FR-212, FR-213 · [ER-11, ER-19]
-- [ ] Toggle restores original text exactly, including whitespace
-- [ ] **Regression:** host changes a fee from Nu. 500 to Nu. 600 while Dzongkha is on; toggle back shows Nu. 600
-- [ ] Choice persists across pages on the same origin
-- [ ] Repeated toggling does not accumulate state or leak memory: state lives in `WeakMap`s; vitest mounts/unmounts 1,000 blocks × 50 cycles and in-flight state returns to zero; Playwright heap snapshot shows no detached `Text` retained after 50 SPA route changes
+- [x] Toggle restores original text exactly, including whitespace — *byte for byte, same nodes, across paragraphs, links and lists (`test/toggle.test.ts`)*
+- [x] **Regression:** host changes a fee from Nu. 500 to Nu. 600 while Dzongkha is on; toggle back shows Nu. 600 — *in jsdom, with and without re-translation, and in real React and Vue (`test/e2e/toggle.spec.ts`)*
+- [x] Choice persists across pages on the same origin — *React page to Vue page and back, both directions (`test/e2e/toggle.spec.ts`)*
+- [x] Repeated toggling does not accumulate state or leak memory: state lives in `WeakMap`s; vitest mounts/unmounts 1,000 blocks × 50 cycles and in-flight state returns to zero; Playwright heap snapshot shows no detached `Text` retained after 50 SPA route changes — *1,000 blocks x 50 cycles leave no state; the held lists dedupe and drop collected entries (they used to grow for the whole session); 50 route changes in React and Vue leave 0 detached Text, where a leaking build leaves 980*
 
 ### S4.4 — Host-page safety
 Requirements: FR-210, NFR-300, NFR-401 · [ER-18]
 - [x] Translated text is inserted as text (`nodeValue` / `setAttribute`), never parsed as HTML. Structural, not filtered: no sanitiser is involved and none should be, because a sanitiser can be bypassed and `nodeValue` is not parsed
 - [x] A fixture page with a script-bearing translation response is not executed — six payloads (`<script>`, `<img onerror>`, `<svg onload>`, quote-break-out, `javascript:` iframe, tag-break-out) plus a hostile `alt` value. Each asserts the payload did not run, created no element, and is present as literal text. Mutation-checked: switching the writer to `innerHTML` fails all eight
-- [ ] axe-core via Playwright on the four fixture hosts: **zero new violations** vs. the widget-absent baseline
+- [x] axe-core via Playwright on the four fixture hosts: **zero new violations** vs. the widget-absent baseline — *`test/e2e/a11y.spec.ts`, English and Dzongkha. Found and fixed: the notice's `<aside>` carried role=status (aria-allowed-role); the live region is now the message alone*
 *gstack:* `/cso` on this story specifically.
 
 ---

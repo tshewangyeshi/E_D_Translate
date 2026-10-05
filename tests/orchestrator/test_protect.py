@@ -13,6 +13,7 @@ from orchestrator.locale.dz import to_tibetan_digits
 from orchestrator.pipeline.protect import (
     EntityCheckError,
     MaskedEntity,
+    find_entities,
     leak_reason,
     mask,
     restore,
@@ -229,3 +230,55 @@ def test_fr143_entity_map_is_per_request_and_not_in_masked_text() -> None:
     for ent in entities.values():
         assert ent.value not in wire
     assert all(isinstance(m, Entity) for m in seg.structure())
+
+
+# --- formats found on the pilot portal (labelled-pilot.json, 2026-10-05) ---
+
+
+@pytest.mark.parametrize(
+    ("text", "value", "kind"),
+    [
+        ("Call 02-330846 or email", "02-330846", "PHONE"),
+        ("via phone # 02 322295 or", "02 322295", "PHONE"),
+        ("Thimphu:02-325622, next", "02-325622", "PHONE"),
+        ("Phone number: 02-337624 / 337623", "02-337624 / 337623", "PHONE"),
+        ("Contact # 02-337176, 337175, 339805", "02-337176, 337175, 339805", "PHONE"),
+        ("Service: 00975-02-322347 (Ext: 2212)", "00975-02-322347", "PHONE"),
+        ("OR 00975-77190135/next", "00975-77190135", "PHONE"),
+        ("EPABX No: 00975-02-(321811/322497/322496).", "00975-02-(321811/322497/322496)", "PHONE"),
+        ("Phone: +975 2 322724/332546 Website", "+975 2 322724/332546", "PHONE"),
+        ("from 9:00 am to 12:00 pm", "9:00 am", "DATE"),
+        ("and from 02:00pm to 05:00pm.", "02:00pm", "DATE"),
+        ("open from 16 May - 6 June, 2016", "16 May", "DATE"),
+        ("provided by April 2019 because", "April 2019", "DATE"),
+        ("Security Deposit nu.50,000 refundable", "nu.50,000", "CUR"),
+        ("pay onlinewww.citizenservices.gov.bt OR", "www.citizenservices.gov.bt", "URL"),
+    ],
+)
+def test_fr140_pilot_formats_are_one_entity(text: str, value: str, kind: str) -> None:
+    spans = [(text[a:b], k) for a, b, k in find_entities(text)]
+    assert (value, kind) in spans, spans
+
+
+@pytest.mark.parametrize(
+    ("text", "not_value"),
+    [
+        ("you may apply online", "may"),
+        ("(Ext:2070)", "Ext:2070"),
+        ("ratio 1:100 applies", "1:100"),
+        ("write to a.www.example", "www.example"),
+    ],
+)
+def test_fr140_pilot_formats_do_not_overreach(text: str, not_value: str) -> None:
+    assert not_value not in [text[a:b] for a, b, _ in find_entities(text)]
+
+
+def test_fr144_a_pilot_phone_number_is_never_left_to_the_model() -> None:
+    """With numbers translated by the model, a phone number must still be masked."""
+    from orchestrator.pipeline.protect import TRANSLATABLE_KINDS
+
+    seg, entities = mask(parse("Call 02-330846 or 02-337624 / 337623."), TRANSLATABLE_KINDS)
+    assert [e.kind for e in entities.values()] == ["PHONE", "PHONE"]
+    assert not any(
+        ch.isdigit() for ch in seg.to_wire().replace("PHONE:1", "").replace("PHONE:2", "")
+    )

@@ -13,6 +13,7 @@
     "test:perf": "playwright test --project=perf --workers=1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.63.0",
     "@types/node": "^20.19.43",
     "esbuild": "0.28.2",

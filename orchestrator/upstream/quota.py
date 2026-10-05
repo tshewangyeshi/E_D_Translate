@@ -8,6 +8,7 @@ the cache permanently cold.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -41,6 +42,9 @@ class QuotaManager:
     clock: Callable[[], float] = time.monotonic
     _live: _Bucket = field(init=False)
     _worker: _Bucket = field(init=False)
+    #: Requests plan in threads (store calls run off the event loop), so two
+    #: can take tokens at once; without this they could both spend the last one.
+    _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.worker_share <= 1.0:
@@ -57,10 +61,12 @@ class QuotaManager:
 
     def try_live(self, n: int = 1) -> bool:
         """Tokens for a live (request-path) upstream call; False means enqueue instead."""
-        return self._live.take(n, self.clock())
+        with self._lock:
+            return self._live.take(n, self.clock())
 
     def try_worker(self, n: int = 1) -> bool:
-        return self._worker.take(n, self.clock())
+        with self._lock:
+            return self._worker.take(n, self.clock())
 
     def snapshot(self) -> dict[str, object]:
         """For health reporting (FR-610). Each process has its own buckets."""

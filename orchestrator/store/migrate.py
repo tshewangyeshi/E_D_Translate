@@ -21,6 +21,13 @@ LOCK_NAME = "dzweb.schema_migration"
 
 def migrate(conn: Any) -> list[str]:
     """Apply pending migrations on a psycopg connection. Returns names applied."""
+    from orchestrator.store.pg import pinned
+
+    with pinned(conn):  # the session lock below must be released where it was taken
+        return _migrate(conn)
+
+
+def _migrate(conn: Any) -> list[str]:
     applied: list[str] = []
     conn.execute("SELECT pg_advisory_lock(hashtext(%s))", (LOCK_NAME,))
     try:

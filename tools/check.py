@@ -42,6 +42,11 @@ STEPS: list[tuple[str, list[str], Path]] = [
         ROOT,
     ),
     (
+        "tag-integrity gate, mock (NFR-200)",
+        [PY, "-m", "pytest", "tests/orchestrator/gates/test_tag_gate.py"],
+        ROOT,
+    ),
+    (
         "masker recall, held-out (FR-140)",
         [
             PY,
@@ -52,11 +57,32 @@ STEPS: list[tuple[str, list[str], Path]] = [
         ],
         ROOT,
     ),
+    (
+        "masker recall, pilot sentences, held-out (FR-140)",
+        [
+            PY,
+            "tools/masker_recall.py",
+            "tests/fixtures/masking/labelled-pilot.json",
+            "--split",
+            "heldout",
+        ],
+        ROOT,
+    ),
+    (
+        "masker recall, pilot sentences, second set (FR-140)",
+        [
+            PY,
+            "tools/masker_recall.py",
+            "tests/fixtures/masking/labelled-pilot-fresh.json",
+            "--split",
+            "heldout",
+        ],
+        ROOT,
+    ),
 ]
 
 NOT_YET: list[tuple[str, str]] = [
     ("entity gate on real model output (NFR-201)", "needs WSO2 recordings (S0.1) and S10.2"),
-    ("tag-integrity gate (NFR-200)", "arrives with S1.5 restoration, after the Sprint 0 go/no-go"),
 ]
 
 
