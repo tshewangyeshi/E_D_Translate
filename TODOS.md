@@ -20,6 +20,8 @@
 
 **Why:** Every measurement so far counts what passes our checks, not what reads well. Piece-by-piece translation keeps English order around links, which may read badly in Dzongkha.
 
+**Also:** the widget's own labels (`adapters/widget/test/labels.test.ts`). The toggle was misspelled "ryong kha" until 2026-10-05; the notice, report and pick labels were then rewritten by a non-native writer.
+
 **Effort:** M (mostly other people's time)
 **Priority:** P1
 **Depends on:** reviewers

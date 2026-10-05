@@ -52,7 +52,7 @@ export function isTibetan(text: string): boolean {
  * the widget to find it. Written as escapes so the text cannot be mangled by an
  * editor or a tool that does not handle the script.
  */
-export const LABEL_SWITCH_TO_DZ = "\u0F62\u0FB1\u0F7C\u0F44\u0F0B\u0F41";  // Dzongkha
+export const LABEL_SWITCH_TO_DZ = "\u0F62\u0FAB\u0F7C\u0F44\u0F0B\u0F41";  // Dzongkha
 export const LABEL_SWITCH_TO_EN = "English";
 
 /**
@@ -68,18 +68,17 @@ export const LABEL_SWITCH_TO_EN = "English";
  */
 export const NOTICE_DZ =
   // "This page was translated by machine. It may contain mistakes."
-  "\u0F62\u0FB1\u0F7C\u0F44\u0F0B\u0F41\u0F0B\u0F51\u0F7A\u0F0B\u0F60\u0F55\u0FB2\u0F74\u0F63\u0F0B\u0F62\u0F72\u0F42\u0F0B\u0F42\u0F72\u0F66\u0F0B\u0F66\u0F92\u0FB1\u0F74\u0F62\u0F0B\u0F56\u0F0D " +
-  "\u0F53\u0F7C\u0F62\u0F0B\u0F60\u0F41\u0FB2\u0F74\u0F63\u0F0B\u0F60\u0F51\u0F74\u0F42\u0F0D";
+  "\u0F62\u0FAB\u0F7C\u0F44\u0F0B\u0F41\u0F0B\u0F60\u0F51\u0F72\u0F0B \u0F60\u0F55\u0FB2\u0F74\u0F63\u0F0B\u0F62\u0F72\u0F42\u0F0B\u0F42\u0F72\u0F66\u0F0B\u0F66\u0F92\u0FB1\u0F74\u0F62\u0F0B\u0F61\u0F7C\u0F51\u0F54\u0F0B\u0F68\u0F72\u0F53\u0F0D \u0F53\u0F7C\u0F62\u0F0B\u0F60\u0F41\u0FB2\u0F74\u0F63\u0F0B\u0F61\u0F7C\u0F51\u0F0B\u0F66\u0FB2\u0F72\u0F51\u0F0D";
 
 export const NOTICE_EN =
   "Translated by machine. It may contain mistakes.";
 
 /** The report-an-error control (FR-522), bilingual for the same reason. */
-export const REPORT_DZ = "\u0F53\u0F7C\u0F62\u0F0B\u0F60\u0F41\u0FB2\u0F74\u0F63\u0F0B\u0F66\u0FB9\u0FB1\u0F53\u0F0D";  // report an error
+export const REPORT_DZ = "\u0F53\u0F7C\u0F62\u0F0B\u0F60\u0F41\u0FB2\u0F74\u0F63\u0F0B\u0F66\u0F99\u0F53\u0F0B\u0F5E\u0F74\u0F0D";  // report an error
 export const REPORT_EN = "Report an error";
 
 /** Shown while the reader is choosing which block is wrong. */
-export const PICK_DZ = "\u0F53\u0F7C\u0F62\u0F0B\u0F56\u0F0B\u0F42\u0F44\u0F0B\u0F60\u0F51\u0F72\u0F0B\u0F60\u0F53\u0F0B\u0F63\u0F0B\u0F60\u0F55\u0FB1\u0F44\u0F0D";
+export const PICK_DZ = "\u0F53\u0F7C\u0F62\u0F0B\u0F56\u0F60\u0F72\u0F0B\u0F61\u0F72\u0F42\u0F0B\u0F5A\u0F72\u0F42\u0F0B\u0F60\u0F51\u0F72\u0F0B\u0F63\u0F74\u0F0B\u0F68\u0F7A\u0F56\u0F0D";
 export const PICK_EN = "Tap the text that is wrong";
 
 export const THANKS_DZ = "\u0F56\u0F40\u0F60\u0F0B\u0F51\u0FB2\u0F72\u0F53\u0F0B\u0F46\u0F7A\u0F0D";  // thank you
