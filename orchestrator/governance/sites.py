@@ -8,6 +8,7 @@ request can make content stricter, never looser.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,11 @@ from orchestrator.governance.paths import normalise_path, path_matches
 
 class SiteConfigError(ValueError):
     pass
+
+
+#: A site id names the site in requests, logs and the audit trail (FR-620), so
+#: it is refused at load if it could not appear in all three.
+_SITE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 
 
 @dataclass(frozen=True)
@@ -60,6 +66,11 @@ class SiteRegistry:
         data = json.loads(path.read_text(encoding="utf-8"))
         sites = []
         for raw in data.get("sites", []):
+            site_id = raw.get("site_id")
+            if not isinstance(site_id, str) or _SITE_ID.fullmatch(site_id) is None:
+                raise SiteConfigError(
+                    f"site_id {site_id!r} must be 1-64 letters, digits, '.', '_' or '-'"
+                )
             tier = raw.get("default_tier", 1)
             if tier not in (1, 2, 3) or isinstance(tier, bool):
                 raise SiteConfigError(f"{raw.get('site_id')}: default_tier must be 1, 2 or 3")
@@ -82,6 +93,10 @@ class SiteRegistry:
     def get(self, site_id: str) -> Site | None:
         site = self._by_id.get(site_id)
         return site if site is not None and site.enabled else None
+
+    def all(self) -> list[Site]:
+        """Every site on record, disabled ones included: the audit trail wants both (FR-620)."""
+        return list(self._by_id.values())
 
     def origin_enrolled(self, origin: str | None) -> bool:
         """True if any enabled site lists this origin (CORS preflight has no body)."""

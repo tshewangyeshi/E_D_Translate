@@ -244,7 +244,7 @@ def test_fr153_term_publish_purges_cache_and_stops_serving_approved() -> None:
     )
     assert store.lookup([LookupItem(keys, 1)])[0] is not None
     assert APPROVED_NS + keys.approved_key in cache.data
-    result = store.invalidate_terms(["T-0005"])
+    result = store.invalidate_terms(["T-0005"], actor="dcdd-publisher")
     assert result.recheck_segments == (keys.segment_key,)
     assert APPROVED_NS + keys.approved_key not in cache.data
     assert store.lookup([LookupItem(keys, 1)]) == [None]
@@ -273,7 +273,7 @@ def test_fr151_redis_down_degrades_to_tm_without_error() -> None:
     (hit,) = store.lookup([LookupItem(keys, 2)])
     assert hit is not None and hit.stored == stored and hit.source == "tm"
     assert resilient.failures >= 2
-    store.invalidate_terms(["T-0005"])  # purge failure is also tolerated
+    store.invalidate_terms(["T-0005"], actor="dcdd-publisher")  # purge failure is also tolerated
 
 
 # --- NFR-304: persist only after N distinct clients ---

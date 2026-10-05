@@ -290,24 +290,33 @@ CREATE TABLE glossary_hit (                       -- term_id → keys index [ER-
   PRIMARY KEY (term_id, lookup_key)
 );
 
-CREATE TABLE error_report (
+CREATE TABLE error_report (            -- FR-430 (0003)
   id           BIGSERIAL PRIMARY KEY,
-  segment_key  CHAR(64) REFERENCES segment(segment_key),
-  suggested    TEXT,
-  reporter_ref TEXT,               -- opaque; never an identifier  NFR-303
-  status       TEXT NOT NULL DEFAULT 'open',
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  segment_key  CHAR(64) NOT NULL,       -- no foreign key: a reader may report text
+                                        -- that was never stored (not_translated)
+  site_id      TEXT NOT NULL,
+  reason       TEXT NOT NULL,           -- closed list, CHECK constraint
+  comment      TEXT,                    -- masked on the way in; cleared after retention
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  triaged_at   TIMESTAMPTZ              -- set by S7.2
+);                                      -- deliberately no reporter column (NFR-303)
 
 CREATE TABLE audit_event (            -- FR-620
   id        BIGSERIAL PRIMARY KEY,
   actor     TEXT NOT NULL,
-  action    TEXT NOT NULL,
+  action    TEXT NOT NULL,            -- closed list, CHECK constraint
   subject   TEXT NOT NULL,
-  detail    JSONB,
+  detail    JSONB NOT NULL DEFAULT '{}',  -- identifiers and counts, never segment text
   at        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+);  -- triggers refuse UPDATE, DELETE, TRUNCATE; id and at are stamped on insert
 ```
+
+**Implementation notes (S3.1, S3.3):**
+- `review_item` also carries `created_at` and `raised_by` (`request` | `operator`), and a state `owed` beside `pending_review`. Tier 2 machine output opens an item wherever it is shown (FR-511): in the same transaction when stored, or on first serve when it was stored for another tier. Only request-raised items count towards the per-site daily cap; past it the item is opened as `owed`. An open item is re-pointed at newer output and deleted when its output is invalidated or expires.
+- `translation_job` carries `review`, because the worker stores on behalf of a request it never saw. A duplicate enqueue merges: the flag is ORed, the priority kept at the more urgent. The tier itself is still not stored.
+- Lookups return, and Redis values carry, whether the segment has a review item, so a Tier 2 serve flags once per segment rather than once per page view.
+- An approval or a termbase publish and its `audit_event` row commit together, and the whole record is validated first. Enrolment, tier-rule and termbase changes are detected when the API process starts, under the migration lock, by comparing the loaded files with the last recorded fingerprints; the worker and tools never write the trail.
+- Migrations run under a PostgreSQL advisory lock, so processes starting together wait for one another instead of racing.
 
 **Implementation notes (S1.7):**
 - The glossary index is `glossary_hit(term_id, segment_key, gfp)` rather than term → lookup key, so it keeps finding the right versions after approvals are re-keyed.
@@ -364,7 +373,7 @@ Tier numbers run from 1 (most restrictive) upward, so "the strictest tier wins" 
 
 - **Rules live in the enrolled site record** (path patterns and CSS selectors), maintained by admins and audited (FR-620).
 - **`GET /v1/config?site=…`** delivers the site's Tier 1 selectors to the widget. **If config is unavailable, the widget offers no translation** and the page stays English (NFR-410), because a widget without selectors could send Tier 1 content as Tier 2.
-- **Review-item creation is capped** per site per day, so forged requests can't flood the review queue.
+- **Review-item creation is capped** per site per day, so forged requests can't flood the review queue. Proposed cap: 500 request-raised items per site per rolling day. Past it, Tier 2 content is still translated and served, and its item is opened as `owed`: on record but out of the reviewers' queue until an operator releases it (`python -m orchestrator.ops.review_owed`). Decided 2026-09-29; the number is still to confirm (TODOS.md).
 - **Tests:** a request claiming Tier 2 for a path or selector the site marks Tier 1 → `tier_blocked`; unknown site → Tier 1; config fetch failure → no translation requests.
 
 ### 2.10 translate.py and queue/ — budget, queue, quota [ER-3, ER-O7]
@@ -389,7 +398,7 @@ Entity masking protects numbers, IDs, emails and URLs, **not names or addresses*
 - **Public pages only** in the pilot enrolment.
 - The widget does not run on pages marked `data-dz-private` and skips regions marked `data-dz-skip`.
 - **Path normalisation:** numeric and ID-like path segments become `:id` before storage.
-- **N distinct clients:** a Tier 2 segment is neither persisted nor sent to MT until it has been seen from at least N distinct clients (proposed 3), counted with a salted, daily-rotated client hash. One-off personalised strings therefore never leave the request.
+- **N distinct clients:** a Tier 2 segment is neither persisted nor sent to MT until it has been seen from at least N distinct clients (proposed 3), counted with a salted, daily-rotated client hash. One-off personalised strings therefore never leave the request. **Counts are scoped to the UTC day the salt lives for**: hashes from different days cannot be compared, so they are never summed. The hash names its day, so a request that crosses midnight is counted on the day whose salt made it. *Open: the salt is per process, so the count is only sound for one API process (TODOS.md).*
 - **Retention:** unapproved machine rows expire (proposed 90 days); approved rows are kept.
 - **Logs** hold `segment_key` hashes only, never text.
 - **`/cso` gates** this component.
@@ -577,17 +586,60 @@ paths:
           application/json:
             schema:
               type: object
-              required: [segment_key]
+              required: [site, segment_key]
               properties:
-                segment_key: { type: string }
-                suggested:   { type: string, maxLength: 5000 }
-                website:     { type: string, description: "honeypot; must be empty (ER-18)" }
+                site:        { type: string, maxLength: 128 }
+                segment_key: { type: string, pattern: "^[0-9a-f]{64}$" }
+                reason:
+                  type: string
+                  maxLength: 32
+                  description: >
+                    wrong_meaning | wrong_term | not_translated | formatting |
+                    offensive | other; anything else is stored as other.
+                    The list is tests/fixtures/feedback/contract.json.
+                comment:
+                  type: string
+                  maxLength: 500
+                  description: >
+                    Optional. No control characters other than line breaks and
+                    tabs. Numbers, IDs, emails and links are masked before
+                    storage; cleared after the retention period.
+                website:     { type: string, maxLength: 256, description: "honeypot; must be empty (ER-18)" }
       responses:
-        "202": { description: "queued for review; also returned (and silently dropped) when rate-limited or honeypot filled" }
+        "202": { description: "Empty body. Stored, rate-limited, saturated, honeypot and store-unavailable all answer exactly this." }
+        "400": { description: "malformed, from the request alone" }
+        "403": { description: "origin not enrolled for this site" }
+        "413": { description: "body over 512 KiB" }
 
   /v1/health:
     get:
-      summary: Dependency health (FR-610)
+      summary: >
+        Dependency health (FR-610). Requires Authorization: Bearer DZWEB_OPS_TOKEN;
+        answers 404 otherwise, and to everyone when no token is configured.
+      responses:
+        "200":
+          description: >
+            Answered with 200 even when degraded. The service answers in English
+            when dependencies are down (NFR-410), so a degraded replica is still
+            serving; status says which. Reused for 2 s.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { enum: [ok, degraded] }
+                  upstreams:
+                    type: object
+                    description: >
+                      nmt, postgres, redis, queue, quota; each with
+                      state ok | down | unknown and counts. A failure is named by
+                      error class, never by message.
+
+  /v1/metrics:
+    get:
+      summary: Counters and rates (FR-611). Same token rule as /v1/health.
+      responses:
+        "200": { content: { text/plain: { description: "Prometheus text format 0.0.4" } } }
 ```
 
 ### 3.1 Cross-cutting API rules

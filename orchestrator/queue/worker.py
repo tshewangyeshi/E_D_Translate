@@ -1,4 +1,6 @@
-"""Background MT worker (backlog S2.4). Requirements: FR-155, FR-156, FR-143, FR-141, FR-142.
+"""Background MT worker (backlog S2.4).
+
+Requirements: FR-155, FR-156, FR-143, FR-141, FR-142, FR-511.
 
 loop:
   sweep expired leases (crashed workers' jobs go back to pending)
@@ -12,6 +14,7 @@ loop:
                                model would give the same output; enqueue remembers
                                this for 24 h so page views don't re-queue it
     store machine translation (masked) ─► complete
+      a Tier 2 job also opens a review item, in the same transaction (FR-511)
 """
 
 from __future__ import annotations
@@ -23,9 +26,10 @@ from dataclasses import dataclass, field
 
 from orchestrator.pipeline.segment import ModelFormat, SegmentError, parse
 from orchestrator.pipeline.validate import validate_output
-from orchestrator.queue.jobs import VALIDATION_FAILURE_PREFIX, ClaimedJob, WorkQueue
+from orchestrator.queue.jobs import VALIDATION_FAILURE_PREFIX, ClaimedJob, WorkQueue, raised_by
 from orchestrator.store.keys import SegmentKeys
 from orchestrator.store.lookup import TranslationStore
+from orchestrator.store.models import ReviewRequest
 from orchestrator.testing.mock_nmt import UpstreamError
 from orchestrator.upstream.quota import QuotaManager
 from orchestrator.upstream.translator import Translator
@@ -84,6 +88,16 @@ class Worker:
             except Exception:  # noqa: BLE001 - keep the worker alive; leases recover lost jobs
                 log.exception("worker iteration failed")
                 report = WorkerReport()
+            if report.claimed or report.swept:
+                # The worker has no metrics endpoint yet (TODOS.md); until it
+                # does, this line is where its outcomes can be read. Causes are
+                # labels the code defines, never segment text.
+                log.info(
+                    "worker claimed=%d swept=%d %s",
+                    report.claimed,
+                    report.swept,
+                    " ".join(f"{k}={v}" for k, v in sorted(report.outcomes.items())),
+                )
             if report.claimed == 0:
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=idle_sleep)
@@ -131,6 +145,9 @@ class Worker:
                 model_version=self.translator.model_version,
                 term_ids=job.term_ids,
                 tag_integrity=True,
+                review=(
+                    ReviewRequest(job.site_id, raised_by(job.priority)) if job.review else None
+                ),
             )
         except Exception as err:  # noqa: BLE001 - storage down: retry later
             self.queue.fail(claimed.id, self.worker_id, f"store:{type(err).__name__}", retry=True)

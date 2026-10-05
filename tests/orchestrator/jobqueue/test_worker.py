@@ -6,6 +6,7 @@ Requirements: FR-155, FR-156, FR-141, FR-142, FR-143, FR-102.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 import pytest
@@ -204,3 +205,24 @@ def test_fr155_postgres_queue_worker_end_to_end(pg_conn: Any) -> None:
 
 def test_nfr412_in_memory_queue_type_is_the_default_for_tests() -> None:
     assert isinstance(make_rig().queue, InMemoryQueue)
+
+
+def test_fr611_the_worker_logs_what_each_batch_did(caplog: pytest.LogCaptureFixture) -> None:
+    """Until the worker has a metrics endpoint, this line is where its outcomes are read."""
+    rig, client = _pending_rig()
+    _post(client, "Apply online today")
+    worker = _worker(rig)
+    stop = asyncio.Event()
+
+    async def one_pass() -> None:
+        async def stop_soon() -> None:
+            await asyncio.sleep(0.05)
+            stop.set()
+
+        await asyncio.gather(worker.run_forever(idle_sleep=0.01, stop=stop), stop_soon())
+
+    with caplog.at_level(logging.INFO, logger="orchestrator.queue.worker"):
+        asyncio.run(one_pass())
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("worker ")]
+    assert lines == ["worker claimed=1 swept=0 stored=1"]
+    assert "Apply" not in "".join(lines)  # outcomes, never segment text

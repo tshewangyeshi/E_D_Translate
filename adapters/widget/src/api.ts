@@ -41,6 +41,13 @@ export interface ApiOptions {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+/** Every request gives up eventually. Not in every supported WebView; falls back silently. */
+function deadline(options: ApiOptions): AbortSignal | undefined {
+  return typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+    ? AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+    : undefined;
+}
+
 async function request(
   options: ApiOptions,
   path: string,
@@ -48,11 +55,7 @@ async function request(
 ): Promise<unknown | null> {
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   if (typeof doFetch !== "function") return null;
-  // AbortSignal.timeout is not in every supported WebView; fall back silently.
-  const signal =
-    typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-      ? AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
-      : undefined;
+  const signal = deadline(options);
   try {
     const response = await doFetch(`${options.base}${path}`, { ...init, signal });
     if (!response.ok) return null;
@@ -140,13 +143,13 @@ function stringList(value: unknown): string[] {
  * which, and must not pretend otherwise.
  *
  * It does not go through `request`, which parses JSON: a 202 has no body, so
- * parsing would throw and a successful report would look like a failure.
+ * parsing would throw and a successful report would look like a failure. It
+ * keeps the same deadline, though: a request that never settles would leave
+ * the form open and the reader unthanked.
  */
 export async function sendFeedback(
   options: ApiOptions,
-  segmentKey: string,
-  reason: string,
-  comment: string,
+  report: { segmentKey: string; reason: string; comment: string; website: string },
 ): Promise<boolean> {
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   if (typeof doFetch !== "function") return false;
@@ -156,13 +159,16 @@ export async function sendFeedback(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         site: options.site,
-        segment_key: segmentKey,
-        reason,
-        ...(comment ? { comment } : {}),
+        segment_key: report.segmentKey,
+        reason: report.reason,
+        ...(report.comment ? { comment: report.comment } : {}),
+        // The honeypot travels only when something filled it (FR-432).
+        ...(report.website ? { website: report.website } : {}),
       }),
+      signal: deadline(options),
     });
     return response.ok;
   } catch {
-    return false; // network failure: the reader is thanked either way
+    return false; // network failure or timeout: the reader is thanked either way
   }
 }

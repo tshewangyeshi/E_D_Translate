@@ -86,3 +86,9 @@ export const THANKS_DZ = "\u0F56\u0F40\u0F60\u0F0B\u0F51\u0FB2\u0F72\u0F53\u0F0B
 export const THANKS_EN = "Thank you";
 
 export const CLOSE_EN = "Hide";
+
+/**
+ * Shown beside the comment box (NFR-303). English only for now: the Dzongkha
+ * wording has to come from DCDD, not from a developer's guess (TODOS.md).
+ */
+export const HINT_EN = "Do not include names, ID numbers or contact details.";

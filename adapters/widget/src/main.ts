@@ -23,6 +23,7 @@ function control(label: string, onClick: () => void): HTMLButtonElement {
   button.type = "button";
   button.textContent = label;
   button.setAttribute("data-dz-control", "");
+  button.setAttribute("translate", "no"); // our own label is not page content
   // The host page owns its own styling; this stays visually neutral and is
   // positioned by the site's CSS via the data attribute.
   button.addEventListener("click", onClick);
@@ -55,9 +56,14 @@ export async function boot(): Promise<Widget | null> {
   const api = { base, site };
   const widget = new Widget(api, () => document.body);
   const notice = new Notice({
-    send: (key, reason, comment) => sendFeedback(api, key, reason, comment),
+    send: (report) => sendFeedback(api, report),
     keyFor: (block) => widget.segmentKeyFor(block),
   });
+  // The notice follows the writes, not the first pass. Machine output also
+  // arrives later -- the retry for queued segments, blocks translated as they
+  // scroll into view, content the host adds -- and on a cold page that is the
+  // only machine output there is (FR-520).
+  widget.onMachineOutput = () => notice.show();
 
   // Configuration first: without it the widget cannot tell Tier 1 or private
   // regions apart, so it offers no control at all (FR-216).
@@ -68,9 +74,6 @@ export async function boot(): Promise<Widget | null> {
       if (widget.language === "en") {
         savePreference("dz");
         await widget.translate();
-        // The notice appears only once machine output is actually on the
-        // page: an approved translation needs no warning (FR-520).
-        if (widget.showingMachineOutput) notice.show();
         button.textContent = LABEL_SWITCH_TO_EN;
       } else {
         savePreference("en");
@@ -92,7 +95,6 @@ export async function boot(): Promise<Widget | null> {
     // the first write cannot race a framework's hydration pass (ER-16).
     whenQuiet(() => {
       void widget.translate().then(() => {
-        if (widget.showingMachineOutput) notice.show();
         button.textContent = LABEL_SWITCH_TO_EN;
       });
     });

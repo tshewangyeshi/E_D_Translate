@@ -1,40 +1,53 @@
-"""FastAPI application: ``POST /v1/translate`` (backlog S2.1).
+"""FastAPI application: ``POST /v1/translate`` (backlog S2.1), feedback (S3.5), health and
+metrics (S2.3).
 
-Requirements: FR-100, FR-102, FR-103, FR-104, NFR-100, NFR-301, NFR-410, NFR-412.
+Requirements: FR-100, FR-102, FR-103, FR-104, FR-430, FR-432, FR-610, FR-611, NFR-100,
+NFR-301, NFR-303, NFR-410, NFR-412.
 
     request ─► size limits (413) ─► JSON (application/json OR text/plain: no CORS preflight)
             ─► enrolled site + Origin allowlist (403) ─► rate limits per origin, per client (429)
             ─► TranslateService ─► 200 always for translation outcomes (NFR-410)
             ─► ETag = hash(body); no-store if any segment is pending_mt (FR-102);
                304 only when every segment is final
+
+``GET /v1/health`` and ``GET /v1/metrics`` are for operators, not for pages.
+They answer 404 unless the request carries the operator token
+(``DZWEB_OPS_TOKEN``), and 404 for everyone when no token is configured: a
+deployment that forgets the gateway rule exposes nothing. They carry no CORS
+headers, so a browser on another origin cannot read them either way.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
 import logging
 import secrets
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from orchestrator.api.ratelimit import RateLimiter, client_bucket
 from orchestrator.governance.paths import redact_path
 from orchestrator.governance.sites import SiteRegistry
+from orchestrator.ops import health as health_checks
+from orchestrator.ops import metrics as ops_metrics
 from orchestrator.service.translate import SegmentIn, Status, TranslateService
 from orchestrator.store.reports import (
     MAX_COMMENT_CHARS,
     REASONS,
     ErrorReport,
     ReportStore,
-    segment_is_saturated,
+    is_saturated,
+    mask_comment,
 )
 
 log = logging.getLogger(__name__)
@@ -42,6 +55,10 @@ log = logging.getLogger(__name__)
 MAX_SEGMENTS = 64
 MAX_TEXT = 5000
 MAX_BODY_BYTES = 512 * 1024
+
+#: Characters a comment may not carry: control characters other than the
+#: line breaks and tabs a reader might type. PostgreSQL refuses NUL outright.
+_CONTROL = {chr(c) for c in range(32)} - {"\n", "\r", "\t"} | {chr(127)}
 
 
 class SegmentRequest(BaseModel):
@@ -56,13 +73,24 @@ class FeedbackRequest(BaseModel):
     `website` is a honeypot: a real reader never sees it, so anything that
     fills it is automated. It is named plausibly on purpose, because a field
     called `honeypot` is one a bot skips.
+
+    Everything that can be refused is refused here, from the request alone,
+    before any outcome is decided. A 400 then says only "this request is
+    malformed", whoever sends it and however full the limits are.
     """
 
     site: str = Field(min_length=1, max_length=128)
     segment_key: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
-    reason: str = "other"
+    reason: str = Field(default="other", max_length=32)
     comment: str | None = Field(default=None, max_length=MAX_COMMENT_CHARS)
-    website: str | None = None  # honeypot
+    website: str | None = Field(default=None, max_length=256)  # honeypot
+
+    @field_validator("comment")
+    @classmethod
+    def _printable(cls, value: str | None) -> str | None:
+        if value is not None and any(ch in _CONTROL for ch in value):
+            raise ValueError("comment contains control characters")
+        return value
 
 
 class TranslateRequest(BaseModel):
@@ -76,7 +104,12 @@ class TranslateRequest(BaseModel):
 
 @dataclass
 class ClientHasher:
-    """Salted, daily-rotated client hash (NFR-304). The salt never leaves memory."""
+    """Salted, daily-rotated client hash (NFR-304). The salt never leaves memory.
+
+    The hash names its day (``YYYY-MM-DD:<hex>``) so the distinct-client
+    counter files it under the day whose salt made it, even if the request
+    finishes after midnight.
+    """
 
     today: Callable[[], date] = lambda: datetime.now(UTC).date()
     _day: date | None = None
@@ -86,7 +119,8 @@ class ClientHasher:
         day = self.today()
         if day != self._day:
             self._day, self._salt = day, secrets.token_bytes(32)
-        return hmac.new(self._salt, client.encode("utf-8"), hashlib.sha256).hexdigest()
+        digest = hmac.new(self._salt, client.encode("utf-8"), hashlib.sha256).hexdigest()
+        return f"{day.isoformat()}:{digest}"
 
 
 def _error(status: int, message: str, headers: dict[str, str] | None = None) -> JSONResponse:
@@ -95,6 +129,19 @@ def _error(status: int, message: str, headers: dict[str, str] | None = None) -> 
 
 def _cors(origin: str) -> dict[str, str]:
     return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+
+
+def _parse_json(raw: bytes) -> Any:
+    """JSON, or ValueError. A deeply nested body is malformed input, not a 500."""
+    try:
+        return json.loads(raw)
+    except (ValueError, UnicodeDecodeError, RecursionError) as err:
+        raise ValueError("body must be JSON") from err
+
+
+#: What FastAPI answers for a route that does not exist. Operator routes answer
+#: exactly this without the token, so probing learns nothing.
+_NOT_FOUND = {"detail": "Not Found"}
 
 
 def create_app(
@@ -107,6 +154,9 @@ def create_app(
     hasher: ClientHasher | None = None,
     reports: ReportStore | None = None,
     feedback_limiter: RateLimiter | None = None,
+    health: Mapping[str, health_checks.Probe] | None = None,
+    gauges: ops_metrics.Gauges | None = None,
+    ops_token: str | None = None,
 ) -> FastAPI:
     app = FastAPI(title="dzweb orchestrator", version="0.1", docs_url=None, redoc_url=None)
     origin_limiter = origin_limiter or RateLimiter(per_minute=6000, burst=600)
@@ -115,36 +165,66 @@ def create_app(
     # FR-432: 10 reports an hour per client. A burst of 10 so a reader who
     # spots several bad segments on one page can report them all at once.
     feedback_limiter = feedback_limiter or RateLimiter(per_minute=10 / 60, burst=10)
+    # In-memory checks answer inline; anything doing I/O -- the database and
+    # cache from the wiring, and the queue -- runs bounded, off the loop (FR-610).
+    checker = health_checks.HealthChecker(
+        inline={
+            "nmt": service.upstream.check,
+            "quota": health_checks.quota_probe(service.quota),
+        },
+        blocking={"queue": health_checks.queue_probe(service.queue), **(health or {})},
+    )
+    gauge_reader = ops_metrics.GaugeReader(
+        gauges if gauges is not None else ops_metrics.service_gauges(service)
+    )
 
-    @app.options("/v1/translate")
-    async def preflight(request: Request) -> Response:
-        origin = request.headers.get("origin")
-        if origin is None or not sites.origin_enrolled(origin):
-            return _error(403, "origin not enrolled")
+    def operator(request: Request) -> bool:
+        if not ops_token:
+            return False
+        offered = request.headers.get("authorization", "")
+        expected = f"Bearer {ops_token}"
+        return hmac.compare_digest(offered.encode("utf-8"), expected.encode("utf-8"))
+
+    @app.get("/v1/health")
+    async def health_report(request: Request) -> Response:
+        """Each upstream's state (FR-610). 200 when answered: see orchestrator/ops/health.py."""
+        if not operator(request):
+            return JSONResponse(_NOT_FOUND, status_code=404)
+        body = health_checks.report(await checker.run())
+        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+    @app.get("/v1/metrics")
+    async def metrics_report(request: Request) -> Response:
+        """Counters and rates in the Prometheus text format (FR-611)."""
+        if not operator(request):
+            return JSONResponse(_NOT_FOUND, status_code=404)
+        families = ops_metrics.collect(service) + await asyncio.to_thread(gauge_reader.read)
         return Response(
-            status_code=204,
-            headers={
-                **_cors(origin),
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
-                "Access-Control-Max-Age": "600",
-            },
+            ops_metrics.render(families).encode("utf-8"),
+            media_type=ops_metrics.CONTENT_TYPE,
+            headers={"Cache-Control": "no-store"},
         )
 
-    @app.options("/v1/config")
-    async def config_preflight(request: Request) -> Response:
-        origin = request.headers.get("origin")
-        if origin is None or not sites.origin_enrolled(origin):
-            return _error(403, "origin not enrolled")
-        return Response(
-            status_code=204,
-            headers={
-                **_cors(origin),
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
-                "Access-Control-Max-Age": "600",
-            },
-        )
+    def preflight(methods: str, allow_headers: str) -> Callable[[Request], Any]:
+        async def handler(request: Request) -> Response:
+            origin = request.headers.get("origin")
+            if origin is None or not sites.origin_enrolled(origin):
+                return _error(403, "origin not enrolled")
+            return Response(
+                status_code=204,
+                headers={
+                    **_cors(origin),
+                    "Access-Control-Allow-Methods": methods,
+                    "Access-Control-Allow-Headers": allow_headers,
+                    "Access-Control-Max-Age": "600",
+                },
+            )
+
+        return handler
+
+    app.options("/v1/translate")(preflight("POST, OPTIONS", "Content-Type, If-None-Match"))
+    app.options("/v1/config")(preflight("GET, OPTIONS", "Content-Type, If-None-Match"))
+    app.options("/v1/feedback")(preflight("POST, OPTIONS", "Content-Type"))
 
     @app.get("/v1/config")
     async def config(request: Request, site: str = "") -> Response:
@@ -179,43 +259,31 @@ def create_app(
             return Response(status_code=304, headers=headers)
         return Response(content, media_type="application/json", headers=headers)
 
-    @app.options("/v1/feedback")
-    async def feedback_preflight(request: Request) -> Response:
-        origin = request.headers.get("origin")
-        if origin is None or not sites.origin_enrolled(origin):
-            return _error(403, "origin not enrolled")
-        return Response(
-            status_code=204,
-            headers={
-                **_cors(origin),
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type",
-                "Access-Control-Max-Age": "600",
-            },
-        )
-
     @app.post("/v1/feedback")
     async def feedback(request: Request) -> Response:
         """Accept a citizen's report that a translation is wrong (FR-430, FR-432).
 
-        Every outcome that is not a configuration error answers 202 with the
-        same body. A report that was stored, one dropped for rate limiting, one
-        dropped because the segment has had its fill today, and one dropped as
-        a honeypot hit are indistinguishable from outside.
+        Every outcome that is not a malformed or unenrolled request answers 202
+        with the same empty body: stored, dropped as a honeypot hit, dropped
+        for rate limiting, dropped because the segment or site has had its fill
+        today, and not stored because the store is down.
 
         That is the point. Distinguishable outcomes turn this endpoint into an
         oracle: a probe could map which segments are saturated, or tune itself
         against the limiter until it finds the edge. It also spares an honest
         reader who happens to trip a limit from being told their report did not
         count, which would teach them not to bother again.
+
+        The cheap refusals come first, so a caller over its limit costs no
+        database work at all.
         """
         origin = request.headers.get("origin")
         raw = await request.body()
         if len(raw) > MAX_BODY_BYTES:
             return _error(413, "request too large")
         try:
-            body = FeedbackRequest.model_validate(json.loads(raw))
-        except (ValueError, UnicodeDecodeError, ValidationError):
+            body = FeedbackRequest.model_validate(_parse_json(raw))
+        except (ValueError, ValidationError):
             return _error(400, "invalid request")
 
         site = sites.allows(body.site, origin)
@@ -225,40 +293,46 @@ def create_app(
         accepted = Response(status_code=202, headers=_cors(origin))
         if reports is None:
             return accepted  # no store configured: accept and discard
+        # Normalised once, and only the normalised value goes anywhere: the
+        # raw field is whatever the caller typed (NFR-303).
+        reason = body.reason if body.reason in REASONS else "other"
 
-        client = client_bucket(request.client.host if request.client else "unknown")
-        # The hash decides whether to accept; it is never written down (NFR-303).
-        limited = not feedback_limiter.allow(f"{origin}|{hasher.hash(client)}")
-        honeypot = bool(body.website)
-        saturated = segment_is_saturated(reports, body.segment_key, datetime.now(UTC))
-
-        if limited or honeypot or saturated:
-            log.info(
-                "feedback dropped site=%s reason=%s",
-                site.site_id,
-                "honeypot" if honeypot else ("saturated" if saturated else "rate_limited"),
-            )
+        def dropped(why: str) -> Response:
+            log.info("feedback dropped site=%s reason=%s why=%s", site.site_id, reason, why)
             return accepted
 
-        reports.record_report(
-            ErrorReport(
-                segment_key=body.segment_key,
-                site_id=site.site_id,
-                reason=body.reason if body.reason in REASONS else "other",
-                comment=body.comment or None,
-            )
+        if body.website:
+            return dropped("honeypot")
+        client = client_bucket(request.client.host if request.client else "unknown")
+        # Keyed on the address bucket, like the translate limiter, and held in
+        # memory only: never written down (NFR-303).
+        if not origin_limiter.allow(origin) or not feedback_limiter.allow(f"{origin}|{client}"):
+            return dropped("rate_limited")
+
+        report = ErrorReport(
+            segment_key=body.segment_key,
+            site_id=site.site_id,
+            reason=reason,
+            comment=mask_comment(body.comment),
         )
-        log.info("feedback stored site=%s reason=%s", site.site_id, body.reason)
+        try:
+            if is_saturated(reports, report, datetime.now(UTC)):
+                return dropped("saturated")
+            reports.record_report(report)
+        except Exception as err:  # noqa: BLE001 - a store fault must look like any other outcome
+            return dropped(f"store_error:{type(err).__name__}")
+        log.info("feedback stored site=%s reason=%s", site.site_id, reason)
         return accepted
 
     @app.post("/v1/translate")
     async def translate(request: Request) -> Response:
+        started = time.perf_counter()
         raw = await request.body()
         if len(raw) > MAX_BODY_BYTES:
             return _error(413, "request too large")
         try:
-            data = json.loads(raw)
-        except (ValueError, UnicodeDecodeError):
+            data = _parse_json(raw)
+        except ValueError:
             return _error(400, "body must be JSON")
         if isinstance(data, dict) and isinstance(data.get("segments"), list):
             if len(data["segments"]) > MAX_SEGMENTS:
@@ -324,6 +398,9 @@ def create_app(
             len(results),
             " ".join(f"{name}={n}" for name, n in sorted(counts.items())),
         )
+        # Requests that reached the service, whatever it answered: refusals
+        # (403, 413, 429) cost nothing and would flatter the figure (FR-611).
+        service.metrics.latency.observe(time.perf_counter() - started)
         headers = {**cors, "ETag": etag}
         if pending:
             headers["Cache-Control"] = "no-store"

@@ -1,7 +1,7 @@
 """Translate a batch of widget segments (backlog S2.1).
 
 Requirements: FR-100, FR-104, FR-122, FR-140..143, FR-155, FR-156, FR-400, FR-401,
-FR-510, FR-512, NFR-304, NFR-410, NFR-412.
+FR-510, FR-511, FR-512, FR-610, FR-611, NFR-304, NFR-410, NFR-412.
 
     per segment: parse ─► mask ─► glossary ─► keys ─► effective tier
                    │ malformed                              │
@@ -14,12 +14,18 @@ FR-510, FR-512, NFR-304, NFR-410, NFR-412.
                                                              ├ no quota ─► enqueue, pending_mt
                                                              └ live MT within budget:
                                                                  ok, valid ─► store, translated
+                                                                   (tier 2: flag for review;
+                                                                    store fails: queue it)
                                                                  invalid   ─► entity/tag/term fail
                                                                  upstream  ─► upstream_error+enqueue
                                                                  too slow  ─► enqueue, pending_mt
 
 Every failure returns the source text (NFR-410). Nothing here raises for a
 translation failure; the API never turns one into a 5xx.
+
+Tier 2 machine output is flagged for review wherever it is served, cache hits
+included (FR-511): the same text may first have been stored for a Tier 3 page,
+and keys carry no tier.
 """
 
 from __future__ import annotations
@@ -27,11 +33,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import Counter
-from dataclasses import dataclass, field
-from enum import StrEnum
+from dataclasses import dataclass
 
 from orchestrator.governance.sites import Site, resolve_tier
+from orchestrator.ops.health import UpstreamHealth
+from orchestrator.ops.metrics import MODEL_OUTPUT_OK, Metrics
 from orchestrator.pipeline.glossary import (
+    TERM_KIND,
     GlossaryCheckError,
     Termbase,
     TermMap,
@@ -40,27 +48,20 @@ from orchestrator.pipeline.glossary import (
     substitute,
 )
 from orchestrator.pipeline.protect import EntityCheckError, EntityMap, mask, restore
-from orchestrator.pipeline.segment import ModelFormat, Segment, SegmentError, parse
+from orchestrator.pipeline.segment import Entity, ModelFormat, Segment, SegmentError, parse
 from orchestrator.pipeline.tags import check_tags
 from orchestrator.queue.jobs import PRIORITY_LIVE_DEFERRED, Job, JobQueue
+from orchestrator.service.status import Status
 from orchestrator.store.keys import SegmentKeys, Versions, keys_for
 from orchestrator.store.lookup import Hit, LookupItem, TranslationStore
-from orchestrator.store.models import Origin
+from orchestrator.store.models import Origin, RaisedBy, ReviewRequest
 from orchestrator.testing.mock_nmt import UpstreamError
 from orchestrator.upstream.quota import QuotaManager
 from orchestrator.upstream.translator import Translator
 
+__all__ = ["SegmentIn", "SegmentOut", "ServiceSettings", "Status", "TranslateService"]
+
 log = logging.getLogger(__name__)
-
-
-class Status(StrEnum):
-    TRANSLATED = "translated"
-    PENDING_MT = "pending_mt"  # the only non-final status
-    TIER_BLOCKED = "tier_blocked"
-    ENTITY_CHECK_FAILED = "entity_check_failed"
-    GLOSSARY_TERM_MISSING = "glossary_term_missing"
-    TAG_FALLBACK = "tag_fallback"
-    UPSTREAM_ERROR = "upstream_error"
 
 
 @dataclass(frozen=True)
@@ -99,13 +100,6 @@ class _Prepared:
     tier: int
 
 
-@dataclass
-class Metrics:
-    statuses: Counter[str] = field(default_factory=Counter)
-    reasons: Counter[str] = field(default_factory=Counter)
-    queue_full: int = 0
-
-
 class TranslateService:
     def __init__(
         self,
@@ -133,6 +127,7 @@ class TranslateService:
             translator.model_version,
         )
         self.metrics = Metrics()
+        self.upstream = UpstreamHealth()  # the model, as this process has seen it (FR-610)
 
     # -- public ---------------------------------------------------------------
 
@@ -162,7 +157,7 @@ class TranslateService:
         live: list[int] = []
         for (n, p), hit in zip(prepared.items(), hits, strict=True):
             if hit is not None:
-                out[n] = self._serve_hit(p, hit)
+                out[n] = self._serve_hit(site, p, hit)
             elif p.tier == 1:
                 out[n] = self._fail(
                     p.seg_in, p.keys, Status.TIER_BLOCKED, "no_approved_translation"
@@ -198,6 +193,7 @@ class TranslateService:
             site_id=site.site_id,
             model_version=self.translator.model_version,
             priority=priority,
+            review=p.tier == 2,  # FR-511: the worker flags what it stores for Tier 2
         )
 
     def _prepare(self, site: Site, seg_in: SegmentIn, path: object = None) -> _Prepared:
@@ -219,7 +215,7 @@ class TranslateService:
         check_tags(restored, p.with_terms)
         return restored
 
-    def _serve_hit(self, p: _Prepared, hit: Hit) -> SegmentOut:
+    def _serve_hit(self, site: Site, p: _Prepared, hit: Hit) -> SegmentOut:
         try:
             stored = parse(hit.stored.masked_target, allow_entities=True)
             final = self._finalise(p, stored)
@@ -227,6 +223,8 @@ class TranslateService:
             # Stored output is validated before storage; failing now means drift. Never serve it.
             log.error("stored translation failed re-validation: %s", err.cause)
             return self._fail(p.seg_in, p.keys, _status_for(err), f"stored:{_reason(err)}")
+        if p.tier == 2:
+            self.store.ensure_review(p.keys, hit.stored, site.site_id)  # FR-511; never raises
         return self._ok(p, final, hit.stored.origin)
 
     def _safe_persist(self, p: _Prepared, client_hash: str) -> bool:
@@ -236,6 +234,7 @@ class TranslateService:
             return False
 
     def _enqueue(self, site: Site, p: _Prepared) -> bool:
+        """Queue for the worker. Tier 2 jobs carry the review flag (FR-511)."""
         try:
             queued = self.queue.enqueue(self.job_for(site, p))
         except Exception:  # noqa: BLE001 - a queue outage must not fail the request
@@ -267,26 +266,49 @@ class TranslateService:
         for n, task in tasks.items():
             p = items[n]
             if task in pending:
+                self._upstream_failed("timeout")
                 out[n] = self._defer(site, p, "live_budget_exceeded")
                 continue
             try:
                 raw = task.result()
             except UpstreamError as err:
+                self._upstream_failed(type(err).__name__)
                 self._enqueue(site, p)  # retry in the background
                 out[n] = self._fail(p.seg_in, p.keys, Status.UPSTREAM_ERROR, type(err).__name__)
                 continue
             except Exception as err:  # noqa: BLE001 - an unexpected client error is an upstream error
+                self._upstream_failed(type(err).__name__)
                 out[n] = self._fail(p.seg_in, p.keys, Status.UPSTREAM_ERROR, type(err).__name__)
                 continue
-            out[n] = self._accept_model_output(p, raw)
+            self.upstream.succeeded()
+            out[n] = self._accept_model_output(site, p, raw)
         return out
 
-    def _accept_model_output(self, p: _Prepared, raw: str) -> SegmentOut:
+    def _upstream_failed(self, kind: str) -> None:
+        self.upstream.failed(kind)
+        self.metrics.upstream_errors[kind] += 1
+
+    def _accept_model_output(self, site: Site, p: _Prepared, raw: str) -> SegmentOut:
         try:
             decoded = self.fmt.decode(raw, p.with_terms)
+        except SegmentError as err:
+            # Unreadable markers: nothing further was checked, the glossary included.
+            self.metrics.model_outputs[Status.TAG_FALLBACK.value] += 1
+            return self._fail(p.seg_in, p.keys, Status.TAG_FALLBACK, _reason(err))
+        try:
             final = self._finalise(p, decoded)
         except SegmentError as err:
-            return self._fail(p.seg_in, p.keys, _status_for(err), _reason(err))
+            status = _status_for(err)
+            self.metrics.model_outputs[status.value] += 1
+            # Entities are checked before terms, so an entity failure says
+            # nothing about the glossary either way and is left out of its rate.
+            # Any later failure means the terms themselves were checked.
+            if status is not Status.ENTITY_CHECK_FAILED:
+                self._record_terms(p, decoded)
+            return self._fail(p.seg_in, p.keys, status, _reason(err))
+        self.metrics.model_outputs[MODEL_OUTPUT_OK] += 1
+        self._record_terms(p, decoded)
+        review = ReviewRequest(site.site_id, RaisedBy.REQUEST) if p.tier == 2 else None
         try:
             self.store.record_machine(
                 keys=p.keys,
@@ -295,10 +317,24 @@ class TranslateService:
                 model_version=self.translator.model_version,
                 term_ids=sorted({t.term_id for t in p.terms.values()}),
                 tag_integrity=True,
+                # FR-511: what a citizen is shown at Tier 2 is what a reviewer is asked to check.
+                review=review,
             )
-        except Exception as err:  # noqa: BLE001 - serving still works; storage retries later
+        except Exception as err:  # noqa: BLE001 - the citizen still gets the translation
+            # Nothing was stored, the review item included. Serve it anyway (a
+            # page is not failed for a storage fault) and queue the segment: the
+            # worker stores and, for Tier 2, flags it once storage is back.
             log.warning("could not store machine translation: %s", type(err).__name__)
+            self.metrics.store_failures += 1
+            self._enqueue(site, p)
         return self._ok(p, final, Origin.MT)
+
+    def _record_terms(self, p: _Prepared, output: Segment) -> None:
+        """Glossary compliance per term (FR-402): each sent term back exactly once."""
+        sent = {t.id for t in p.with_terms.tokens if isinstance(t, Entity) and t.kind == TERM_KIND}
+        back = Counter(t.id for t in output.tokens if isinstance(t, Entity) and t.kind == TERM_KIND)
+        self.metrics.terms.found += len(sent)
+        self.metrics.terms.restored += sum(1 for tid in sent if back[tid] == 1)
 
     # -- results --------------------------------------------------------------
 

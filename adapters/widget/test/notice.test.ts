@@ -8,24 +8,41 @@
 // hold the notice to that: it appears whenever machine output is on the page,
 // it cannot be dismissed in a way that carries to the next page, and the report
 // control actually reaches the server.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Notice, type NoticeOptions } from "../src/notice";
-import { NOTICE_DZ, NOTICE_EN } from "../src/locale-dz";
+import { Notice, type NoticeOptions, type Report } from "../src/notice";
+import { HINT_EN, NOTICE_DZ, NOTICE_EN } from "../src/locale-dz";
 
 const KEY = "a".repeat(64);
 
+// The same file the server's tests read, so the two sides cannot drift.
+const CONTRACT = JSON.parse(
+  readFileSync(resolve(process.cwd(), "../../tests/fixtures/feedback/contract.json"), "utf8"),
+) as { reasons: string[]; max_comment_chars: number; honeypot_field: string };
+
 function make(overrides: Partial<NoticeOptions> = {}) {
-  const sent: { key: string; reason: string; comment: string }[] = [];
+  const sent: Report[] = [];
   const notice = new Notice({
-    send: async (key, reason, comment) => {
-      sent.push({ key, reason, comment });
+    send: async (report) => {
+      sent.push(report);
       return true;
     },
     keyFor: () => KEY,
     ...overrides,
   });
   return { notice, sent };
+}
+
+/** Show the notice, start a report and pick the block. */
+function openForm(overrides: Partial<NoticeOptions> = {}) {
+  const made = make(overrides);
+  made.notice.show();
+  (document.querySelector("[data-dz-report]") as HTMLElement).click();
+  document.getElementById("block")!.click();
+  return made;
 }
 
 beforeEach(() => {
@@ -103,7 +120,138 @@ describe("reporting an error (FR-522, FR-430)", () => {
     (document.querySelector("[data-dz-send]") as HTMLElement).click();
     await vi.waitFor(() => expect(sent.length).toBe(1));
 
-    expect(sent[0]).toEqual({ key: KEY, reason: "wrong_term", comment: "the fee word" });
+    expect(sent[0]).toEqual({
+      segmentKey: KEY,
+      reason: "wrong_term",
+      comment: "the fee word",
+      website: "",
+    });
+  });
+
+  it("fr522_one_tap_sends_one_report_however_slow_the_network", async () => {
+    // Each extra POST spends the reader's allowance of ten an hour.
+    let finish: (ok: boolean) => void = () => {};
+    const sent: Report[] = [];
+    openForm({
+      send: (report) => {
+        sent.push(report);
+        return new Promise<boolean>((done) => (finish = done));
+      },
+    });
+    const send = document.querySelector("[data-dz-send]") as HTMLButtonElement;
+    send.click();
+    send.click();
+    send.click();
+    expect(send.disabled).toBe(true);
+    expect(sent.length).toBe(1);
+    finish(true);
+    await vi.waitFor(() => expect(document.querySelector("[data-dz-report-form]")).toBe(null));
+  });
+
+  it("fr522_picking_a_second_block_replaces_the_form", () => {
+    const { notice } = openForm();
+    (document.querySelector("[data-dz-report]") as HTMLElement).click();
+    document.getElementById("block")!.click();
+    expect(document.querySelectorAll("[data-dz-report-form]").length).toBe(1);
+    expect(notice.selecting).toBe(false);
+  });
+
+  it("fr522_escape_leaves_picking_and_gives_the_page_back", () => {
+    // While picking, every click on the page is swallowed. A reader who
+    // changed their mind must not be left with a page that ignores them.
+    const clicks: string[] = [];
+    document.getElementById("block")!.addEventListener("click", () => clicks.push("host"));
+    const { notice } = make();
+    notice.show();
+    (document.querySelector("[data-dz-report]") as HTMLElement).click();
+    expect(notice.selecting).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(notice.selecting).toBe(false);
+    expect(document.querySelector("[data-dz-report]")?.textContent).toContain("Report an error");
+    document.getElementById("block")!.click();
+    expect(clicks).toEqual(["host"]);
+  });
+
+  it("fr522_the_readers_own_toggle_still_works_while_picking", () => {
+    // Regression: the capture-phase handler swallowed a tap on the widget's
+    // language button, so the reader had to tap it twice.
+    document.body.innerHTML +=
+      "<button id='toggle' data-dz-control>English</button>";
+    const taps: string[] = [];
+    document.getElementById("toggle")!.addEventListener("click", () => taps.push("toggle"));
+    const { notice } = make();
+    notice.show();
+    (document.querySelector("[data-dz-report]") as HTMLElement).click();
+    document.getElementById("toggle")!.click();
+    expect(taps).toEqual(["toggle"]);
+    expect(notice.selecting).toBe(true); // still picking: that tap was not a pick
+  });
+
+  it("fr522_a_keyboard_reader_picks_the_block_holding_their_selection", async () => {
+    const { notice, sent } = make();
+    notice.show();
+    (document.querySelector("[data-dz-report]") as HTMLElement).click();
+
+    const block = document.getElementById("block")!;
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+
+    expect(notice.selecting).toBe(false);
+    expect(document.querySelector("[data-dz-report-form]")).not.toBe(null);
+    (document.querySelector("[data-dz-send]") as HTMLElement).click();
+    await vi.waitFor(() => expect(sent.length).toBe(1));
+    selection.removeAllRanges();
+  });
+
+  it("fr522_a_keyboard_reader_picks_the_focused_element", () => {
+    document.body.innerHTML = "<a id='link' href='#x'>DZ:A link</a>";
+    const { notice } = make();
+    notice.show();
+    (document.querySelector("[data-dz-report]") as HTMLElement).click();
+    document.getSelection()?.removeAllRanges();
+    (document.getElementById("link") as HTMLElement).focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(document.querySelector("[data-dz-report-form]")).not.toBe(null);
+  });
+
+  it("fr522_hiding_the_notice_also_leaves_picking", () => {
+    const clicks: string[] = [];
+    document.getElementById("block")!.addEventListener("click", () => clicks.push("host"));
+    const { notice } = make();
+    notice.show();
+    (document.querySelector("[data-dz-report]") as HTMLElement).click();
+    (document.querySelector("[data-dz-notice-hide]") as HTMLElement).click();
+    expect(notice.selecting).toBe(false);
+    document.getElementById("block")!.click();
+    expect(clicks).toEqual(["host"]);
+  });
+
+  it("fr432_the_form_carries_a_honeypot_a_reader_cannot_reach", async () => {
+    // The server drops any report whose `website` is filled. That only works
+    // if there is a field for a form-filling bot to fill.
+    const { sent } = openForm();
+    const trap = document.querySelector("[data-dz-website]") as HTMLInputElement;
+    expect(trap.name).toBe(CONTRACT.honeypot_field);
+    expect(trap.tabIndex).toBe(-1); // not reachable by keyboard
+    expect(trap.getAttribute("aria-hidden")).toBe("true"); // nor by screen reader
+    expect(trap.hasAttribute("hidden")).toBe(false); // bots skip fields that are not rendered
+    expect(trap.style.left).toBe("-9999px");
+
+    trap.value = "https://spam.example";
+    (document.querySelector("[data-dz-send]") as HTMLElement).click();
+    await vi.waitFor(() => expect(sent.length).toBe(1));
+    expect(sent[0]!.website).toBe("https://spam.example");
+  });
+
+  it("nfr303_the_reader_is_told_not_to_include_personal_details", () => {
+    openForm();
+    expect(document.querySelector("[data-dz-hint]")?.textContent).toBe(HINT_EN);
+    expect(HINT_EN).toMatch(/names/i);
   });
 
   it("fr522_choosing_a_block_does_not_trigger_the_hosts_own_handler", () => {
@@ -144,14 +292,7 @@ describe("reporting an error (FR-522, FR-430)", () => {
     const values = [...document.querySelectorAll("[data-dz-reason] option")].map(
       (o) => (o as HTMLOptionElement).value,
     );
-    expect(values).toEqual([
-      "wrong_meaning",
-      "wrong_term",
-      "not_translated",
-      "formatting",
-      "offensive",
-      "other",
-    ]);
+    expect(values).toEqual(CONTRACT.reasons);
   });
 
   it("fr522_the_reader_is_thanked_the_same_way_whatever_the_server_did", async () => {
@@ -176,6 +317,6 @@ describe("reporting an error (FR-522, FR-430)", () => {
     (document.querySelector("[data-dz-report]") as HTMLElement).click();
     document.getElementById("block")!.click();
     const comment = document.querySelector("[data-dz-comment]") as HTMLTextAreaElement;
-    expect(comment.maxLength).toBe(500);
+    expect(comment.maxLength).toBe(CONTRACT.max_comment_chars);
   });
 });
