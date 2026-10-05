@@ -41,6 +41,7 @@ Requirements: NFR-100, NFR-412, FR-156 · [ER-O7]
 - [ ] Measured and documented: requests per second, maximum batch size, maximum input length, p95 latency, behaviour at the limit (429 vs queueing)
 - [ ] Capacity note in the spec: pilot pages × segments per page vs quota, including the offline pre-warm time
 - [ ] Token-bucket sizes for the quota manager (§2.10) derived from these numbers
+- [x] One GovTech access token shared by the API, the worker and the tools, kept in Redis until a minute before it expires and across restarts; refused tokens are replaced for everyone (`orchestrator/upstream/token_store.py`) — *asked by GovTech 2026-10-05; live: three processes, one token request*
 
 ### S0.3 — Numbered requirements in the repo
 Requirements: all · [ER-O8]

@@ -77,6 +77,7 @@ from orchestrator.store.pg import ReconnectingConnection, advisory_lock
 from orchestrator.store.postgres_tm import PostgresTM
 from orchestrator.store.reports import PostgresReportStore, ReportStore
 from orchestrator.upstream.quota import QuotaManager
+from orchestrator.upstream.token_store import RedisTokenStore
 from orchestrator.upstream.translator import MockTranslator, Translator
 from orchestrator.upstream.wso2 import Wso2Config, Wso2Translator
 
@@ -267,6 +268,12 @@ def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
     client = redis.Redis.from_url(
         settings.redis_url, socket_timeout=REDIS_TIMEOUT, socket_connect_timeout=REDIS_TIMEOUT
     )
+    if isinstance(translator, Wso2Translator):
+        # One access token for the API, the worker and every tool, kept until it
+        # expires, and kept across restarts (asked by GovTech, 2026-10-05).
+        translator.token_store = RedisTokenStore(
+            client, translator.config.token_url, translator.config.client_id
+        )
     store = TranslationStore(
         PostgresTM(conn),
         ResilientCache(RedisCache(client)),
