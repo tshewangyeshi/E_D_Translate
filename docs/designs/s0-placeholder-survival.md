@@ -88,8 +88,12 @@ Failures found on the way, all but three of them ours, each fixed with tests
 
 Second pass: **261 of 264 (98.9%)**. The three left are long academic
 paragraphs where the model dropped a citation year ("TANG Yu-fang, 2009"):
-content was lost, so English is the right answer. Next: send long paragraphs
-sentence by sentence.
+content was lost, so English is the right answer.
+
+Third pass, each piece sent sentence by sentence: **262 of 264 (99.2%)**. One
+of the three now translates. In the other two the model drops a bracketed
+citation, "(Yang Qingshan, 2010)", even from a sentence on its own; they stay
+English, correctly.
 
 Found on the way: the portal's service documents pin Times New Roman on every
 run. It has no Tibetan, so on Windows translated text falls back to the very

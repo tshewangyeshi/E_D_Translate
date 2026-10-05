@@ -23,6 +23,13 @@ translate, the model writes such a placeholder in Tibetan letters, and the
 value it stood for could not be put back. A value inside a sentence is still
 sent, so the model can place it in Dzongkha word order.
 
+Each piece then goes sentence by sentence, the sentences in parallel and
+rejoined with the source's own spacing. Seen on the pilot portal, 2026-10-05:
+given a long paragraph, the model dropped part of it (a citation's year), and
+the whole paragraph had to stay English. A sentence ends at ``.``, ``!`` or
+``?`` before a capital letter, but not after an abbreviation (``Nu.``,
+``e.g.``) or an initial; a list number ("1.") stays with its sentence.
+
 Raises UpstreamError when a call fails and SegmentError when an answer cannot
 be decoded; the caller treats both exactly as it treated a single call.
 """
@@ -52,6 +59,19 @@ _LABEL_END = re.compile(r"[:：\-–—]\s*$")
 _SEPARATOR = re.compile(r"[^\w]*")
 #: Values in brackets at the end: "... the G2C system (".
 _OPEN_BRACKET = re.compile(r"\s*\(\s*$")
+#: A sentence end: punctuation, closing quotes or brackets, space, then a capital
+#: or a list number;
+#: or, for "(2009).The" as the pilot portal writes it, a full stop with no space
+#: after a lowercase word or a bracket, before a capitalised word.
+_SENTENCE_END = re.compile(
+    r"[.!?][\"'’”)\]]*(\s+)(?=[\"'‘“(\[]?[A-Z]|\d{1,2}[.)]\s)|(?<=[a-z)])\.(?=[A-Z][a-z])"
+)
+_WORD_BEFORE = re.compile(r"(\w+)$")
+#: Words a full stop follows without ending the sentence.
+_ABBREVIATIONS = frozenset(
+    "nu no nos mr mrs ms dr st sr jr vs etc eg ie govt dept ltd co inc approx fig ref "
+    "jan feb mar apr jun jul aug sep sept oct nov dec".split()
+)
 
 
 def calls_needed(segment: Segment) -> int:
@@ -59,7 +79,7 @@ def calls_needed(segment: Segment) -> int:
     if not has_words(segment):
         return 0
     pieces = split_at_tags(segment)
-    return sum(1 for p in pieces if isinstance(p, Segment) and has_words(p))
+    return sum(len(_sentences(p)) for p in pieces if isinstance(p, Segment) and has_words(p))
 
 
 async def translate_segment(translator: Translator, fmt: ModelFormat, segment: Segment) -> Segment:
@@ -89,8 +109,61 @@ async def _piece(translator: Translator, fmt: ModelFormat, piece: Piece) -> Segm
         return piece  # punctuation, a lone entity: nothing to translate
     lead, core, trail = _trim(piece)
     core, values = _label_values(core)
-    translated = await _one(translator, fmt, core)
-    return Segment((*lead, *translated.tokens, *values, *trail))
+    sentences = split_sentences(core)
+    translated = await asyncio.gather(*(_one(translator, fmt, s) for s, _ in sentences))
+    body: list[Token] = []
+    for (_, gap), sentence in zip(sentences, translated, strict=True):
+        body.extend((*sentence.tokens, Text(gap)))
+    return Segment(tuple(_merge_text([*lead, *body, *values, *trail])))
+
+
+def _sentences(piece: Segment) -> list[tuple[Segment, str]]:
+    """The sentences ``_piece`` sends for this piece."""
+    return split_sentences(_label_values(_trim(piece)[1])[0])
+
+
+def split_sentences(core: Segment) -> list[tuple[Segment, str]]:
+    """The sentences of ``core``, each with the whitespace that followed it.
+
+    Boundaries are found inside text only, never next to a placeholder; a
+    stretch with no words (a list number, a closing bracket) joins its
+    neighbour, so every sentence returned has words when ``core`` does.
+    """
+    found: list[tuple[list[Token], str]] = []
+    current: list[Token] = []
+    for token in core.tokens:
+        if not isinstance(token, Text):
+            current.append(token)
+            continue
+        value, start = token.value, 0
+        for m in _SENTENCE_END.finditer(value):
+            if m.start() > 0 and value[m.start() - 1].isspace():
+                continue  # "based on . Net": a stop after a space ends nothing
+            word = _WORD_BEFORE.search(value[: m.start()])
+            if word and (len(word.group(1)) == 1 or word.group(1).lower() in _ABBREVIATIONS):
+                continue  # "Nu. 500", "e.g. This", "A. B. Tshering"
+            end = m.start(1) if m.group(1) is not None else m.end()
+            current.append(Text(value[start:end]))
+            found.append((current, m.group(1) or ""))
+            current, start = [], m.end()
+        current.append(Text(value[start:]))
+    found.append((current, ""))
+
+    merged: list[tuple[list[Token], str]] = []
+    for tokens, gap in found:
+        if merged and not _has_words(merged[-1][0]):
+            before, before_gap = merged.pop()
+            tokens = [*before, Text(before_gap), *tokens]
+        merged.append((tokens, gap))
+    if len(merged) > 1 and not _has_words(merged[-1][0]):
+        tokens, gap = merged.pop()
+        before, before_gap = merged.pop()
+        merged.append(([*before, Text(before_gap), *tokens], gap))
+    return [(Segment(tuple(_merge_text(tokens))), gap) for tokens, gap in merged]
+
+
+def _has_words(tokens: list[Token]) -> bool:
+    return has_words(Segment(tuple(_merge_text(tokens))))
 
 
 def _label_values(core: Segment) -> tuple[Segment, tuple[Token, ...]]:

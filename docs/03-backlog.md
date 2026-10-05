@@ -97,6 +97,7 @@ Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
 - [ ] Masker recall on **hand-labelled pilot snapshots** with a held-out set — *waits for Sprint 0 snapshots (S0.1)*
 - [x] **FR-144 (proposed):** amounts, dates, percentages and counts translated by the model, values checked in any script (`DZWEB_NUMBERS`, default `model`); phone numbers a masked kind of their own (`PHONE`); bare `www.` addresses masked as `URL` (`tests/orchestrator/test_numbers.py`) — *awaits SRS sign-off*
 - [x] Values after a label ("Email ID: …") or in brackets at the end of a piece are not sent to the model; only the words are (`orchestrator/service/model_call.py`)
+- [x] Each piece is sent sentence by sentence (abbreviations, initials and list numbers do not split); 262 of 264 pilot segments translate (99.2%)
 - [x] The adversarial mock cannot produce an altered entity in output — 10,000 seeded runs across both candidate token formats (`tests/orchestrator/gates/test_entity_gate.py`); verified by mutation to catch the merged-number bug
 *gstack:* `/spec` → implement → `/review` → `/codex` (second opinion if policy allows — this is the highest-consequence module)
 

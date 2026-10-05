@@ -298,3 +298,66 @@ def test_fr140_brackets_with_words_in_them_are_still_sent() -> None:
     model = Recorder(lambda text: f"DZ {text}")
     run(translate_segment(model, XML, seg))
     assert "<e1/>" in model.sent[0]
+
+
+# --- sentence by sentence (seen on the pilot portal, 2026-10-05) ---
+
+
+def _sentences_of(text: str) -> list[str]:
+    from orchestrator.service.model_call import split_sentences
+
+    return [s.to_wire() for s, _ in split_sentences(parse(text))]
+
+
+@pytest.mark.parametrize(
+    ("text", "sentences"),
+    [
+        (
+            "Apply online. Pay the fee! Is it done?",
+            ["Apply online.", "Pay the fee!", "Is it done?"],
+        ),
+        ("Pay Nu. 500 now. Dr. Wangmo signs it.", ["Pay Nu. 500 now.", "Dr. Wangmo signs it."]),
+        ("Bring it, e.g. Form A. Then wait.", ["Bring it, e.g. Form A. Then wait."]),
+        ("1. Submit the form. 2. Pay the fee.", ["1. Submit the form.", "2. Pay the fee."]),
+        (
+            "It doubled (TANG, 2009).The colleges grew.",
+            ["It doubled (TANG, 2009).", "The colleges grew."],
+        ),
+        ('He said "Apply now." Then he left.', ['He said "Apply now."', "Then he left."]),
+        ("Version 2.5 of the form. Use it.", ["Version 2.5 of the form.", "Use it."]),
+        ("One sentence only", ["One sentence only"]),
+        (
+            "Built on . Net Three-layer design. It works.",
+            ["Built on . Net Three-layer design.", "It works."],
+        ),
+    ],
+)
+def test_fr122_a_piece_is_sent_sentence_by_sentence(text: str, sentences: list[str]) -> None:
+    assert _sentences_of(text) == sentences
+
+
+def test_fr122_sentences_go_separately_and_come_back_with_the_source_spacing() -> None:
+    seg = parse("Apply online.  Pay the fee.")
+    model = Recorder()
+    out = run(translate_segment(model, XML, seg))
+    assert sorted(model.sent) == ["Apply online.", "Pay the fee."]
+    assert out.to_wire() == "DZ[Apply online.]  DZ[Pay the fee.]"
+    assert calls_needed(seg) == 2
+
+
+def test_fr140_a_placeholder_stays_in_its_sentence() -> None:
+    seg = _masked_wire("Write to help@portal.gov.example. Then wait for a reply.")
+    model = Recorder()
+    out = run(translate_segment(model, XML, seg))
+    assert sorted(model.sent) == ["Then wait for a reply.", "Write to <e1/>."]
+    assert [t for t in out.tokens if isinstance(t, Entity)] == [
+        t for t in seg.tokens if isinstance(t, Entity)
+    ]
+
+
+def test_fr210_sentences_inside_a_link_piece_keep_the_tags_around_them() -> None:
+    seg = parse("⟦1⟧Read this. Then apply.⟦/1⟧ Thank you.")
+    model = Recorder()
+    out = run(translate_segment(model, XML, seg))
+    assert out.to_wire() == "⟦1⟧DZ[Read this.] DZ[Then apply.]⟦/1⟧ DZ[Thank you.]"
+    assert calls_needed(seg) == 3
