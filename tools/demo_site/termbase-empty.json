@@ -1,0 +1,5 @@
+{
+  "_comment": "Demo only: no glossary terms, so what you see is the GovTech model's own translation. The sample termbase in tests/ holds dummy Dzongkha that would mislead a reader.",
+  "termbase_version": "demo-empty",
+  "terms": []
+}

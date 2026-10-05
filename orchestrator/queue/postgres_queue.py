@@ -20,9 +20,10 @@ from orchestrator.queue.jobs import (
 _ENQUEUE = """
 INSERT INTO translation_job
   (machine_key, segment_key, approved_key, masked_source, gfp, term_ids, site_id,
-   model_version, priority, max_attempts)
+   model_version, priority, max_attempts, review)
 SELECT %(machine_key)s, %(segment_key)s, %(approved_key)s, %(masked_source)s, %(gfp)s,
-       %(term_ids)s, %(site_id)s, %(model_version)s, %(priority)s, %(max_attempts)s
+       %(term_ids)s, %(site_id)s, %(model_version)s, %(priority)s, %(max_attempts)s,
+       %(review)s
  WHERE NOT EXISTS (
          SELECT 1 FROM translation_version v
           WHERE v.lookup_key = %(machine_key)s AND v.origin = 'mt' AND v.invalidated_at IS NULL)
@@ -31,7 +32,17 @@ SELECT %(machine_key)s, %(segment_key)s, %(approved_key)s, %(masked_source)s, %(
           WHERE f.machine_key = %(machine_key)s AND f.state = 'failed'
             AND f.last_error LIKE %(validation_prefix)s
             AND f.finished_at > now() - make_interval(secs => %(memory)s))
-ON CONFLICT (machine_key) WHERE state IN ('pending', 'running') DO NOTHING
+ON CONFLICT (machine_key) WHERE state IN ('pending', 'running') DO UPDATE
+   SET review = translation_job.review OR EXCLUDED.review,
+       priority = LEAST(translation_job.priority, EXCLUDED.priority)
+"""
+
+# A full queue refuses new work, but a duplicate of queued work still merges.
+_MERGE = """
+UPDATE translation_job
+   SET review = review OR %(review)s, priority = LEAST(priority, %(priority)s)
+ WHERE machine_key = %(machine_key)s AND state IN ('pending', 'running')
+RETURNING 1
 """
 
 _CLAIM = """
@@ -46,7 +57,7 @@ UPDATE translation_job j
        lease_until = now() + make_interval(secs => %(lease)s)
   FROM ready WHERE j.id = ready.id
 RETURNING j.id, j.attempts, j.machine_key, j.segment_key, j.approved_key, j.masked_source,
-          j.gfp, j.term_ids, j.site_id, j.model_version, j.priority
+          j.gfp, j.term_ids, j.site_id, j.model_version, j.priority, j.review
 """
 
 
@@ -62,12 +73,18 @@ class PostgresJobQueue:
         ).fetchone()
         return int(n)
 
+    def oldest_pending_seconds(self) -> float | None:
+        (age,) = self.conn.execute(
+            "SELECT extract(epoch FROM now() - min(created_at))"
+            "  FROM translation_job WHERE state = 'pending'"
+        ).fetchone()
+        return None if age is None else max(0.0, float(age))
+
     def enqueue(self, job: Job) -> bool:
         if self.depth() >= self.max_depth:
             already = self.conn.execute(
-                "SELECT 1 FROM translation_job WHERE machine_key = %s"
-                " AND state IN ('pending', 'running')",
-                (job.machine_key,),
+                _MERGE,
+                {"machine_key": job.machine_key, "review": job.review, "priority": job.priority},
             ).fetchone()
             return already is not None  # a duplicate of queued work is not "full"
         self.conn.execute(
@@ -83,6 +100,7 @@ class PostgresJobQueue:
                 "model_version": job.model_version,
                 "priority": job.priority,
                 "max_attempts": self.max_attempts,
+                "review": job.review,
                 "validation_prefix": VALIDATION_FAILURE_PREFIX + "%",
                 "memory": FAILURE_MEMORY_SECONDS,
             },
@@ -107,6 +125,7 @@ class PostgresJobQueue:
                     site_id=r[8],
                     model_version=r[9],
                     priority=r[10],
+                    review=r[11],
                 ),
             )
             for r in rows

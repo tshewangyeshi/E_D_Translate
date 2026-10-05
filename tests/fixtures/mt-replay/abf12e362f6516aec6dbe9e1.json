@@ -1,0 +1,11 @@
+{
+  "source_wire": "Mobile number",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Mobile number",
+  "raw_output": "འགྲུལ་འཕྲིན་ཨང་།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "form-label",
+  "recorded": "2026-10-05"
+}

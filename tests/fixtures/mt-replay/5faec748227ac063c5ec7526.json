@@ -1,0 +1,11 @@
+{
+  "source_wire": "Download ⟦1⟧⟦T:3⟧⟦/1⟧ and submit it to the ⟦2⟧⟦T:4⟧⟦/2⟧.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "live",
+  "model_input": "Download <x1><e3/></x1> and submit it to the <x2><e4/></x2>.",
+  "raw_output": "ཕབ་ལེན་འབད། <x1><e3/></x1> འདི་ལུ་ཕུལ་ནི། <x2><e4/></x2>.",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "paragraph-with-link",
+  "recorded": "2026-10-05"
+}

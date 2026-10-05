@@ -116,3 +116,27 @@ class TestSiteConfigLoading:
         """Silently dropping a rule would leave the operator believing Tier 1 is in force."""
         with pytest.raises(SiteConfigError):
             SiteRegistry.load(self.write(tmp_path, self.valid(path_rules=rules)))
+
+
+class TestSiteIds:
+    """A site id appears in requests, logs and the audit trail, so it must fit all three."""
+
+    def write(self, tmp_path: Path, site_id: object) -> Path:
+        p = tmp_path / "sites.json"
+        raw = {"site_id": site_id, "origins": [ORIGIN], "default_tier": 2}
+        p.write_text(json.dumps({"sites": [raw]}), encoding="utf-8")
+        return p
+
+    @pytest.mark.parametrize("site_id", ["portal", "tier1-only", "moh.gov_2", "a" * 64])
+    def test_fr601_ordinary_site_ids_load(self, tmp_path: Path, site_id: str) -> None:
+        assert SiteRegistry.load(self.write(tmp_path, site_id)).get(site_id) is not None
+
+    @pytest.mark.parametrize(
+        "site_id", ["", "has space", "a" * 65, "-leading-dash", "portal\n", "sïte", None, 7]
+    )
+    def test_fr601_a_site_id_that_cannot_be_recorded_is_refused_at_load(
+        self, tmp_path: Path, site_id: object
+    ) -> None:
+        """Regression: an over-long id stopped the API at start with an audit error."""
+        with pytest.raises(SiteConfigError):
+            SiteRegistry.load(self.write(tmp_path, site_id))

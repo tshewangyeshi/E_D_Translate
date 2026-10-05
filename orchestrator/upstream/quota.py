@@ -28,6 +28,10 @@ class _Bucket:
             return True
         return False
 
+    def available(self, now: float) -> float:
+        """Tokens that could be taken now. Looking does not refill or spend."""
+        return min(self.capacity, self.tokens + (now - self.updated) * self.rate)
+
 
 @dataclass
 class QuotaManager:
@@ -57,3 +61,13 @@ class QuotaManager:
 
     def try_worker(self, n: int = 1) -> bool:
         return self._worker.take(n, self.clock())
+
+    def snapshot(self) -> dict[str, object]:
+        """For health reporting (FR-610). Each process has its own buckets."""
+        now = self.clock()
+        return {
+            "live_tokens": round(self._live.available(now), 2),
+            "live_per_second": self._live.rate,
+            "worker_tokens": round(self._worker.available(now), 2),
+            "worker_per_second": self._worker.rate,
+        }

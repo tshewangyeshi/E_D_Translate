@@ -1,0 +1,11 @@
+{
+  "source_wire": "Late applications attract a surcharge of ⟦PCT:1⟧ on the standard ⟦T:2⟧.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Late applications attract a surcharge of ⟦PCT:1⟧ on the standard ⟦T:2⟧.",
+  "raw_output": "ཞུ་ཡིག་འཕྱིས་མི་འདི་གིས་ ཚད་གཞི་ ཊི་ ༢ ལུ་ པི་སི་ཊི་ ༡ གྱི་འཐུས་འཐེབ་བཀུགཔ་ཨིན།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "paragraph",
+  "recorded": "2026-10-05"
+}

@@ -1,0 +1,11 @@
+{
+  "source_wire": "Office hours:⟦v1/⟧Monday to Friday, ⟦NUM:2⟧ am to ⟦NUM:3⟧ pm.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Office hours:⟦v1/⟧Monday to Friday, ⟦NUM:2⟧ am to ⟦NUM:3⟧ pm.",
+  "raw_output": "ཡིག་ཚང་གི་དུས་ཚོད་: v1/རེས་གཟའ་མིག་དམར་ལས་སྤེན་པ་ ནུབ་མོའི་ཆུ་ཚོད་༢ ལས་ཕྱི་རུའི་ཆུ་ཚོད་༣ ཚུན།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "paragraph-with-break",
+  "recorded": "2026-10-05"
+}

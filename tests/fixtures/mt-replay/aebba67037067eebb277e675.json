@@ -1,0 +1,11 @@
+{
+  "source_wire": "Applications received after ⟦DATE:1⟧ will be processed within ⟦NUM:2⟧ working days.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "Applications received after {e1} will be processed within {e2} working days.",
+  "raw_output": "ཨེ༡་གི་ཤུལ་ལས་ཐོབ་པའི་ཞུ་ཡིག་ཚུ་ ཨེ༢་གི་ལཱ་གི་ཉིནམ་ནང་འཁོད་ལུ་བཟོ་འོང་།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "paragraph",
+  "recorded": "2026-10-05"
+}

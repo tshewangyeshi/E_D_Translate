@@ -8,6 +8,8 @@
 // fails to load (FR-215).
 
 import { LABEL_SWITCH_TO_DZ, LABEL_SWITCH_TO_EN } from "./locale-dz.js";
+import { sendFeedback } from "./api.js";
+import { Notice } from "./notice.js";
 import { Widget, savePreference, savedPreference, whenQuiet } from "./widget.js";
 
 /** The script element that loaded this module, for its data- attributes. */
@@ -21,6 +23,7 @@ function control(label: string, onClick: () => void): HTMLButtonElement {
   button.type = "button";
   button.textContent = label;
   button.setAttribute("data-dz-control", "");
+  button.setAttribute("translate", "no"); // our own label is not page content
   // The host page owns its own styling; this stays visually neutral and is
   // positioned by the site's CSS via the data attribute.
   button.addEventListener("click", onClick);
@@ -50,7 +53,17 @@ export async function boot(): Promise<Widget | null> {
   if (!site) return null; // nothing to do without a site id
 
   const base = script?.getAttribute("data-dz-api") ?? new URL(".", import.meta.url).origin;
-  const widget = new Widget({ base, site }, () => document.body);
+  const api = { base, site };
+  const widget = new Widget(api, () => document.body);
+  const notice = new Notice({
+    send: (report) => sendFeedback(api, report),
+    keyFor: (block) => widget.segmentKeyFor(block),
+  });
+  // The notice follows the writes, not the first pass. Machine output also
+  // arrives later -- the retry for queued segments, blocks translated as they
+  // scroll into view, content the host adds -- and on a cold page that is the
+  // only machine output there is (FR-520).
+  widget.onMachineOutput = () => notice.show();
 
   // Configuration first: without it the widget cannot tell Tier 1 or private
   // regions apart, so it offers no control at all (FR-216).
@@ -65,6 +78,7 @@ export async function boot(): Promise<Widget | null> {
       } else {
         savePreference("en");
         widget.toggleBack();
+        notice.hide();
         button.textContent = LABEL_SWITCH_TO_DZ;
       }
     })();

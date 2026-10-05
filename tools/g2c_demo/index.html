@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Tibetan&family=Roboto:wght@400;500;700&display=swap">
+  <title>Life events | Local copy of the G2C portal</title>
+  <style>
+    /* A local test copy of https://g2c.tech.gov.bt/g2cportal/ListOfLifeEventComponent.
+       Content is a snapshot of the portal's own API (scrape.py); rendered by script,
+       as the real Angular page is, so the widget meets content that arrives late. */
+    :root { --navy: #002a4d; --blue: #0288c7; --ink: #1f2933; --muted: #5b6776; --line: #dfe5ec; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.6 Roboto, system-ui, sans-serif; color: var(--ink); background: #fff; }
+    .layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+    nav.side { background: var(--navy); color: #fff; }
+    nav.side .brand { font-weight: 700; letter-spacing: .5px; padding: 16px 20px; border-bottom: 1px solid #ffffff22; }
+    nav.side .search { display: flex; margin: 12px 20px; }
+    nav.side .search input { flex: 1; border: 0; border-radius: 6px 0 0 6px; background: var(--blue); color: #fff; padding: 10px 12px; font: inherit; }
+    nav.side .search input::placeholder { color: #e6f4fb; }
+    nav.side .search button { border: 0; border-radius: 0 6px 6px 0; background: var(--blue); color: #fff; padding: 0 14px; border-left: 1px solid #ffffff33; }
+    nav.side h2 { color: #6fc3ec; font-size: 14px; margin: 18px 20px 6px; }
+    nav.side a { display: block; color: #fff; text-decoration: none; padding: 8px 20px; font-size: 14px; }
+    nav.side a:hover, nav.side a[aria-current] { background: #ffffff18; }
+    .topbar { background: var(--blue); color: #fff; display: flex; justify-content: flex-end; align-items: center; gap: 16px; padding: 10px 20px; font-size: 14px; font-weight: 500; }
+    header.portal { text-align: center; padding: 18px 20px 14px; box-shadow: 0 2px 6px #0000001a; }
+    header.portal h1 { margin: 0; color: var(--blue); font: 700 26px/1.3 Georgia, "Times New Roman", serif; letter-spacing: 1px; }
+    header.portal p { margin: 4px 0 0; color: var(--blue); font-weight: 700; font-size: 17px; }
+    .finders { display: flex; flex-wrap: wrap; justify-content: center; gap: 28px; padding: 18px 20px 0; }
+    .finders label { font-weight: 700; font-size: 19px; margin-right: 10px; }
+    .finders input { background: #f1f1f1; border: 0; padding: 7px 10px; width: 270px; font: inherit; font-size: 14px; }
+    main { padding: 10px 40px 40px; }
+    main h2.title { text-align: center; color: var(--blue); font: 400 34px/1.3 Georgia, "Times New Roman", serif; letter-spacing: 2px; margin: 14px 0 6px; text-transform: uppercase; }
+    main p.lead { text-align: center; color: var(--muted); margin: 0 auto 24px; max-width: 720px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+    .card { border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 8px; align-content: start; text-decoration: none; color: inherit; box-shadow: 0 1px 4px #0000000f; }
+    .card:hover { border-color: var(--blue); box-shadow: 0 4px 12px #0288c733; }
+    .card .icon { width: 44px; height: 44px; border-radius: 50%; background: #e3f3fb; color: var(--blue); display: grid; place-items: center; font-weight: 700; font-size: 18px; }
+    .card h3 { margin: 0; font-size: 17px; color: var(--navy); }
+    .card p { margin: 0; color: var(--muted); font-size: 14px; }
+    .card .more { color: var(--blue); font-weight: 500; font-size: 14px; }
+    .back { display: inline-block; margin: 14px 0; color: var(--blue); text-decoration: none; font-weight: 500; }
+    article.doc { max-width: 900px; margin: 0 auto; overflow-wrap: anywhere; }
+    article.doc table { border-collapse: collapse; }
+    article.doc td, article.doc th { border: 1px solid var(--line); padding: 4px 8px; vertical-align: top; }
+    .apply { display: inline-block; margin: 18px 0; background: var(--blue); color: #fff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 500; }
+    footer { background: var(--blue); color: #fff; text-align: center; padding: 14px; font-size: 14px; }
+    .copy-note { background: #fff6d6; color: #6b5300; font-size: 13px; text-align: center; padding: 6px 12px; }
+    button[data-dz-control] { position: fixed; right: 20px; bottom: 20px; padding: 10px 16px; font: inherit; border-radius: 20px; border: 1px solid var(--blue); background: #fff; color: var(--blue); cursor: pointer; z-index: 10; }
+    aside[data-dz-notice] { position: fixed; left: 280px; bottom: 20px; max-width: 420px; background: #fffbe6; border: 1px solid #e0c46c; border-radius: 8px; padding: 10px 14px; display: grid; gap: 6px; font-size: 14px; z-index: 10; }
+    aside[data-dz-notice] button { justify-self: start; }
+    /* The portal's own Dzongkha font, for letters and digits alike. The service
+       documents pin Times New Roman on every <font> and <span>; it has no Tibetan,
+       so without !important Windows falls back to its tiny Himalaya font. */
+    [lang^="dz"], [lang^="dz"] * { font-family: "Noto Serif Tibetan", Roboto, system-ui, sans-serif !important; }
+    [lang^="dz"] { line-height: 1.9; }
+    @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } main { padding: 10px 16px 32px; } aside[data-dz-notice] { left: 16px; } }
+  </style>
+</head>
+<body>
+  <div class="copy-note" translate="no">Local test copy of the G2C life-events page for dzweb translation testing. Not the real portal; links to services go to the live site.</div>
+  <div class="layout">
+    <nav class="side" aria-label="Categories">
+      <div class="brand">CITIZEN SERVICES</div>
+      <form class="search" onsubmit="return false"><input placeholder="Search..." aria-label="Search services"><button aria-label="Search">&#9906;</button></form>
+      <h2>General</h2>
+      <a href="#/category/life-events">Dashboard</a>
+      <h2>Categories</h2>
+      <div id="categories"></div>
+    </nav>
+    <div>
+      <div class="topbar">Share your feedback to aid us in improving our services</div>
+      <header class="portal">
+        <h1>CITIZEN SERVICES PORTAL</h1>
+        <p>ROYAL GOVERNMENT OF BHUTAN - In Pursuit of Improving Public Service Delivery</p>
+      </header>
+      <div class="finders">
+        <div><label for="q">Search</label><input id="q" placeholder="Are you looking for a job, make a license?"></div>
+        <div><label for="track">Track your application</label><input id="track" placeholder="Enter Application Number"></div>
+      </div>
+      <main id="view"><p class="lead">Loading services...</p></main>
+      <footer>&copy; 2023, GovTech Agency, Royal Government of Bhutan &nbsp; Disclaimer &nbsp; Services Delivery Standards &nbsp; Contact Us</footer>
+    </div>
+  </div>
+
+  <script>
+    const view = document.getElementById("view");
+    let categories = [], services = [];
+
+    const el = (tag, props = {}, ...children) => {
+      const node = Object.assign(document.createElement(tag), props);
+      node.append(...children);
+      return node;
+    };
+
+    function lifeEvents() {
+      return categories.find((c) => c.categoryName.trim().toLowerCase() === "life events");
+    }
+
+    function showCategory(id) {
+      const category = id === "life-events" ? lifeEvents() : categories.find((c) => String(c.id) === id);
+      if (!category) return showMissing();
+      const list = services.filter((s) => s.category === String(category.id));
+      const cards = list.map((s) =>
+        el("a", { className: "card", href: `#/service/${s.id}` },
+          el("div", { className: "icon", ariaHidden: "true", translate: false }, s.serviceName.trim().charAt(0)),
+          el("h3", {}, s.serviceName.trim()),
+          el("p", {}, (s.serviceDescription || "").trim()),
+          el("span", { className: "more" }, "View details")));
+      view.replaceChildren(
+        el("h2", { className: "title" }, category.categoryName.trim()),
+        el("p", { className: "lead" }, (category.categoryDescription || "").trim()),
+        el("div", { className: "cards" }, ...cards));
+      mark(category.id);
+    }
+
+    function showService(id) {
+      const s = services.find((x) => String(x.id) === id);
+      if (!s) return showMissing();
+      const doc = el("article", { className: "doc" });
+      doc.innerHTML = s.serviceDocument; // cleaned by scrape.py: no scripts, handlers or javascript: links
+      const parts = [
+        el("a", { className: "back", href: `#/category/${s.category}` }, "← Back to services"),
+        el("h2", { className: "title" }, s.serviceName.trim()),
+        doc,
+      ];
+      if (s.serviceLink) parts.push(el("a", { className: "apply", href: s.serviceLink, target: "_blank", rel: "noopener noreferrer" }, "Apply online"));
+      view.replaceChildren(...parts);
+      mark(s.category);
+    }
+
+    function showMissing() {
+      view.replaceChildren(el("p", { className: "lead" }, "That page is not in the snapshot."));
+    }
+
+    function mark(categoryId) {
+      for (const a of document.querySelectorAll("#categories a")) {
+        if (a.dataset.id === String(categoryId)) a.setAttribute("aria-current", "page");
+        else a.removeAttribute("aria-current");
+      }
+    }
+
+    function route() {
+      const [, kind, id] = (location.hash || "#/category/life-events").split("/");
+      if (kind === "service") showService(id);
+      else showCategory(id || "life-events");
+      window.scrollTo(0, 0);
+    }
+
+    Promise.all([fetch("data/categories.json"), fetch("data/services.json")])
+      .then(async ([c, s]) => {
+        if (!c.ok || !s.ok) throw new Error("no snapshot");
+        categories = await c.json();
+        services = await s.json();
+        const used = new Set(services.map((x) => x.category));
+        for (const c of categories.filter((c) => used.has(String(c.id)))) {
+          const link = el("a", { href: `#/category/${c.id}` }, c.categoryName.trim());
+          link.dataset.id = String(c.id);
+          document.getElementById("categories").append(link);
+        }
+        window.addEventListener("hashchange", route);
+        route();
+      })
+      .catch(() => {
+        view.replaceChildren(el("p", { className: "lead" }, "No snapshot yet: run python tools/g2c_demo/scrape.py"));
+      });
+  </script>
+  <script type="module" src="/widget/main.js" data-dz-site="portal" data-dz-api="http://127.0.0.1:8000"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jomolhari&display=swap">
+  <title>Passport renewal | Demo citizen services portal</title>
+  <style>
+    /* A plain stand-in for a government page. All content is invented. */
+    :root { --ink: #1d2733; --muted: #5b6776; --line: #d9dee5; --accent: #8a1c1c; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.6 system-ui, "Segoe UI", sans-serif; color: var(--ink); background: #f6f7f9; }
+    header { background: var(--accent); color: #fff; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header strong { font-size: 18px; }
+    main { max-width: 860px; margin: 24px auto; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 24px 32px; }
+    h1 { margin-top: 0; }
+    a { color: #0b5cad; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; }
+    th { background: #f0f2f5; }
+    form { display: grid; gap: 10px; max-width: 420px; }
+    label { font-weight: 600; }
+    input { padding: 8px; border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+    .legal-notice { border-left: 4px solid var(--accent); background: #fbf3f3; padding: 10px 14px; margin: 20px 0; }
+    .demo-banner { font-size: 13px; color: var(--muted); }
+    button[data-dz-control] { position: fixed; right: 20px; bottom: 20px; padding: 10px 16px; font: inherit; border-radius: 20px; border: 1px solid var(--accent); background: #fff; color: var(--accent); cursor: pointer; }
+    aside[data-dz-notice] { position: fixed; left: 20px; bottom: 20px; max-width: 420px; background: #fffbe6; border: 1px solid #e0c46c; border-radius: 8px; padding: 10px 14px; display: grid; gap: 6px; font-size: 14px; }
+    aside[data-dz-notice] button { justify-self: start; }
+    /* One Dzongkha font for letters and digits alike; Windows' own Tibetan font draws
+       letters tiny and digits full size. */
+    [lang^="dz"] { font-family: "Jomolhari", system-ui, "Segoe UI", sans-serif; line-height: 1.9; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Demo Citizen Services Portal</strong>
+    <span class="demo-banner">Invented content for testing dzweb</span>
+  </header>
+
+  <main>
+    <h1>Passport renewal</h1>
+    <p>Apply for a passport online and collect it from the nearest office.</p>
+    <p>Read the <a href="#eligibility">eligibility rules</a> before you apply.</p>
+    <p>Applications are <strong>not</strong> accepted by email.</p>
+
+    <h2>Fees and payment</h2>
+    <p>Pay Nu. 500 by 30 June 2026.</p>
+    <table>
+      <thead><tr><th>Service</th><th>Fee</th><th>Processing time</th></tr></thead>
+      <tbody>
+        <tr><td>New passport</td><td>Nu. 1,500</td><td>Within 10 working days</td></tr>
+        <tr><td>Passport renewal</td><td>Nu. 500</td><td>Within 7 working days</td></tr>
+      </tbody>
+    </table>
+
+    <h2>What to bring</h2>
+    <ul>
+      <li>A copy of your citizenship certificate</li>
+      <li>Two recent passport photographs</li>
+      <li>Your old passport</li>
+    </ul>
+
+    <h2>Apply online</h2>
+    <form onsubmit="return false">
+      <label for="name">Full name</label>
+      <input id="name" placeholder="As written on your citizenship certificate">
+      <label for="dob">Date of birth</label>
+      <input id="dob" placeholder="Day, month and year">
+      <label for="phone">Mobile number</label>
+      <input id="phone" placeholder="Eight digits">
+    </form>
+
+    <h2 id="eligibility">Contact</h2>
+    <p>For help, write to applications@portal.gov.example or visit <a href="#help">the help page</a>.</p>
+    <p>Office hours: Monday to Friday, 9 am to 5 pm.</p>
+
+    <div class="legal-notice">
+      <p>Legal notice: giving false information in a passport application is an offence under the law.</p>
+    </div>
+  </main>
+
+  <script type="module" src="/widget/main.js" data-dz-site="portal" data-dz-api="http://127.0.0.1:8000"></script>
+</body>
+</html>

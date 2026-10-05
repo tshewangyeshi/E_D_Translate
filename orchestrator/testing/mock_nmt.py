@@ -30,6 +30,7 @@ from orchestrator.pipeline.segment import (
     Token,
     Void,
 )
+from orchestrator.upstream.errors import UpstreamError, UpstreamTimeout, UpstreamUnavailable
 
 
 class Mode(StrEnum):
@@ -60,16 +61,8 @@ CORRUPTING_MODES: tuple[Mode, ...] = (
 )
 
 
-class UpstreamError(Exception):
-    """Base class for simulated upstream failures."""
-
-
-class UpstreamTimeout(UpstreamError):
-    pass
-
-
-class UpstreamUnavailable(UpstreamError):
-    status = 503
+# The mock raises the same errors as the real client (orchestrator/upstream/errors.py).
+__all__ = ["UpstreamError", "UpstreamTimeout", "UpstreamUnavailable"]
 
 
 @dataclass(frozen=True)

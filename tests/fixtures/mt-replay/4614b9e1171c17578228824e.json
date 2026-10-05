@@ -1,0 +1,11 @@
+{
+  "source_wire": "⟦CUR:1⟧",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "⟦CUR:1⟧",
+  "raw_output": "སྨན་བཅོས་ ༡།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "table-cell",
+  "recorded": "2026-10-05"
+}

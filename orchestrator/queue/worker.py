@@ -1,4 +1,6 @@
-"""Background MT worker (backlog S2.4). Requirements: FR-155, FR-156, FR-143, FR-141, FR-142.
+"""Background MT worker (backlog S2.4).
+
+Requirements: FR-155, FR-156, FR-143, FR-141, FR-142, FR-511.
 
 loop:
   sweep expired leases (crashed workers' jobs go back to pending)
@@ -12,6 +14,7 @@ loop:
                                model would give the same output; enqueue remembers
                                this for 24 h so page views don't re-queue it
     store machine translation (masked) ─► complete
+      a Tier 2 job also opens a review item, in the same transaction (FR-511)
 """
 
 from __future__ import annotations
@@ -23,10 +26,12 @@ from dataclasses import dataclass, field
 
 from orchestrator.pipeline.segment import ModelFormat, SegmentError, parse
 from orchestrator.pipeline.validate import validate_output
-from orchestrator.queue.jobs import VALIDATION_FAILURE_PREFIX, ClaimedJob, WorkQueue
+from orchestrator.queue.jobs import VALIDATION_FAILURE_PREFIX, ClaimedJob, WorkQueue, raised_by
+from orchestrator.service.model_call import translate_segment
 from orchestrator.store.keys import SegmentKeys
 from orchestrator.store.lookup import TranslationStore
-from orchestrator.testing.mock_nmt import UpstreamError
+from orchestrator.store.models import ReviewRequest
+from orchestrator.upstream.errors import UpstreamError
 from orchestrator.upstream.quota import QuotaManager
 from orchestrator.upstream.translator import Translator
 
@@ -84,6 +89,16 @@ class Worker:
             except Exception:  # noqa: BLE001 - keep the worker alive; leases recover lost jobs
                 log.exception("worker iteration failed")
                 report = WorkerReport()
+            if report.claimed or report.swept:
+                # The worker has no metrics endpoint yet (TODOS.md); until it
+                # does, this line is where its outcomes can be read. Causes are
+                # labels the code defines, never segment text.
+                log.info(
+                    "worker claimed=%d swept=%d %s",
+                    report.claimed,
+                    report.swept,
+                    " ".join(f"{k}={v}" for k, v in sorted(report.outcomes.items())),
+                )
             if report.claimed == 0:
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=idle_sleep)
@@ -106,16 +121,23 @@ class Worker:
             )
             return "bad_source"
         try:
-            raw = await asyncio.wait_for(
-                self.translator.translate(self.fmt.encode(source), source), self.call_timeout
+            # Same as the live path: placeholder-only text is not sent, text with
+            # inline tags is sent piece by piece (orchestrator/service/model_call.py).
+            decoded = await asyncio.wait_for(
+                translate_segment(self.translator, self.fmt, source), self.call_timeout
             )
         except (UpstreamError, TimeoutError) as err:
             self.queue.fail(
                 claimed.id, self.worker_id, f"upstream:{type(err).__name__}", retry=True
             )
             return "upstream_retry"
+        except SegmentError as err:
+            cause = getattr(err, "reason", None) or err.cause
+            self.queue.fail(
+                claimed.id, self.worker_id, f"{VALIDATION_FAILURE_PREFIX}{cause}", retry=False
+            )
+            return f"invalid:{cause}"
         try:
-            decoded = self.fmt.decode(raw, source)
             validate_output(decoded, source)
         except SegmentError as err:
             cause = getattr(err, "reason", None) or err.cause
@@ -131,6 +153,9 @@ class Worker:
                 model_version=self.translator.model_version,
                 term_ids=job.term_ids,
                 tag_integrity=True,
+                review=(
+                    ReviewRequest(job.site_id, raised_by(job.priority)) if job.review else None
+                ),
             )
         except Exception as err:  # noqa: BLE001 - storage down: retry later
             self.queue.fail(claimed.id, self.worker_id, f"store:{type(err).__name__}", retry=True)

@@ -1,0 +1,11 @@
+{
+  "source_wire": "⟦T:1⟧",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "live",
+  "model_input": "<e1/>",
+  "raw_output": "<e1/>",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "heading",
+  "recorded": "2026-10-05"
+}

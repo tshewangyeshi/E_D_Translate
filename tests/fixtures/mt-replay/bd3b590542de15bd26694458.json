@@ -1,0 +1,11 @@
+{
+  "source_wire": "Within ⟦NUM:1⟧ working days",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Within ⟦NUM:1⟧ working days",
+  "raw_output": "ལཱ་འབད་ནིའི་ཉིན་གྲངས་ ༡:༡ གི་ནང་འཁོད་ལུ།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "table-cell",
+  "recorded": "2026-10-05"
+}

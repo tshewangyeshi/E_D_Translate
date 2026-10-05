@@ -89,7 +89,8 @@ def test_fr155_settings_require_the_essentials() -> None:
     ("extra", "message"),
     [
         ({"DZWEB_TRANSLATOR": "mock"}, "ALLOW_MOCK"),
-        ({}, "no real translator"),
+        ({}, "must be 'wso2'"),
+        ({"DZWEB_TRANSLATOR": "wso2"}, "needs DZWEB_WSO2_URL"),
     ],
 )
 def test_fr155_mock_translator_needs_explicit_opt_in(extra: dict[str, str], message: str) -> None:
@@ -169,3 +170,14 @@ def test_fr512_prewarm_without_a_path_does_not_machine_translate() -> None:
     assert site is not None
     report = prewarm(rig.service, site, [{**s, "path": None} for s in SEGMENTS])
     assert report.queued == 0
+
+
+def test_nfr304_the_distinct_client_threshold_defaults_to_three() -> None:
+    assert Settings.from_env(_ENV).distinct_clients == 3
+    assert Settings.from_env({**_ENV, "DZWEB_DISTINCT_CLIENTS": "1"}).distinct_clients == 1
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "three"])
+def test_nfr304_the_distinct_client_threshold_cannot_be_switched_off(value: str) -> None:
+    with pytest.raises(ConfigError, match="DZWEB_DISTINCT_CLIENTS"):
+        Settings.from_env({**_ENV, "DZWEB_DISTINCT_CLIENTS": value})

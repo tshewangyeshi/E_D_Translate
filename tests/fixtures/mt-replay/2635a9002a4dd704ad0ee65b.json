@@ -1,0 +1,11 @@
+{
+  "source_wire": "Quote your file reference ⟦REF:1⟧ in all correspondence.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "live",
+  "model_input": "Quote your file reference <e1/> in all correspondence.",
+  "raw_output": "ཡིག་འབྲེལ་ག་ར་ནང་ ཁྱོད་རའི་ཡིག་སྣོད་རྒྱབ་རྟེན་ <e1/> གི་ལུང་དྲང་།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "paragraph",
+  "recorded": "2026-10-05"
+}

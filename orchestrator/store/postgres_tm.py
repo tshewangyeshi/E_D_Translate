@@ -1,19 +1,22 @@
 """PostgreSQL translation memory. Same contract as :class:`orchestrator.store.tm.InMemoryTM`.
 
-Requirements: FR-410, FR-411, FR-412, FR-143, FR-153, FR-154, NFR-305.
+Requirements: FR-410, FR-411, FR-412, FR-143, FR-153, FR-154, FR-511, NFR-305.
 Uses psycopg 3; each method is one transaction; ``lookup`` is ONE query (ER-21).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from orchestrator.store.models import (
+    FlagOutcome,
     Invalidation,
     MigrationReport,
     Origin,
+    RaisedBy,
     ReviewItem,
     ReviewState,
     Stored,
@@ -22,14 +25,51 @@ from orchestrator.store.models import (
 from orchestrator.store.tm import RekeyFn
 
 _LOOKUP = """
-SELECT 'a' AS kind, r.approved_key AS key, v.id, v.origin, v.masked_target
+SELECT 'a' AS kind, r.approved_key AS key, v.id, v.origin, v.masked_target, TRUE
   FROM review_item r JOIN translation_version v ON v.id = r.current_version
  WHERE r.state = 'approved' AND r.approved_key = ANY(%(approved)s)
 UNION ALL
-(SELECT DISTINCT ON (v.lookup_key) 'm', v.lookup_key, v.id, v.origin, v.masked_target
+(SELECT DISTINCT ON (v.lookup_key) 'm', v.lookup_key, v.id, v.origin, v.masked_target,
+        EXISTS (SELECT 1 FROM review_item r WHERE r.segment_key = v.segment_key)
    FROM translation_version v
   WHERE v.origin = 'mt' AND v.invalidated_at IS NULL AND v.lookup_key = ANY(%(machine)s)
   ORDER BY v.lookup_key, v.id DESC)
+"""
+
+# One statement: re-point an open item, or open a new one -- pending, or owed
+# when the site is past its cap. Two requests racing at the cap boundary can
+# both open a pending item: the cap is a flood limit, not a quota, and one
+# over costs a reviewer nothing.
+_FLAG = """
+WITH existing AS (
+  SELECT 1 FROM review_item WHERE segment_key = %(segment_key)s
+), repoint AS (
+  UPDATE review_item SET current_version = %(version_id)s, updated_at = now()
+   WHERE segment_key = %(segment_key)s AND state IN ('pending_review', 'owed')
+     AND current_version < %(version_id)s
+  RETURNING 1
+), opened AS (
+  SELECT count(*) AS n FROM review_item
+   WHERE site_id = %(site_id)s AND raised_by = 'request' AND state <> 'owed'
+     AND created_at >= %(since)s
+), inserted AS (
+  INSERT INTO review_item (segment_key, state, current_version, site_id, raised_by)
+  SELECT %(segment_key)s,
+         CASE WHEN %(cap)s::int IS NOT NULL AND (SELECT n FROM opened) >= %(cap)s::int
+              THEN 'owed' ELSE 'pending_review' END,
+         %(version_id)s, %(site_id)s, %(raised_by)s
+   WHERE NOT EXISTS (SELECT 1 FROM existing)
+  ON CONFLICT (segment_key) DO NOTHING
+  RETURNING state
+)
+SELECT (SELECT state FROM inserted), (SELECT count(*) FROM repoint)
+"""
+
+# Open items whose version is no longer served ask a reviewer about nothing.
+_CLOSE_INVALIDATED = """
+DELETE FROM review_item r USING translation_version v
+ WHERE v.id = r.current_version AND r.state IN ('pending_review', 'owed')
+   AND v.invalidated_at IS NOT NULL
 """
 
 _VERSION_COLS = (
@@ -59,6 +99,19 @@ class PostgresTM:
         self.conn = conn
         self.lookup_calls = 0
 
+    def _tx(self) -> AbstractContextManager[Any]:
+        """A transaction, or none when the caller already opened one.
+
+        Nested ``transaction()`` blocks become savepoints, each two more round
+        trips. Inside ``TranslationStore.atomic`` the outer transaction already
+        makes the work all-or-nothing, so joining it is enough.
+        """
+        from psycopg.pq import TransactionStatus
+
+        if self.conn.info.transaction_status != TransactionStatus.IDLE:
+            return nullcontext()
+        return cast(AbstractContextManager[Any], self.conn.transaction())
+
     def lookup(
         self, approved_keys: Sequence[str], machine_keys: Sequence[str]
     ) -> tuple[dict[str, Stored], dict[str, Stored]]:
@@ -68,8 +121,10 @@ class PostgresTM:
         ).fetchall()
         approved: dict[str, Stored] = {}
         machine: dict[str, Stored] = {}
-        for kind, key, vid, origin, target in rows:
-            (approved if kind == "a" else machine)[key] = Stored(vid, Origin(origin), target)
+        for kind, key, vid, origin, target, reviewed in rows:
+            (approved if kind == "a" else machine)[key] = Stored(
+                vid, Origin(origin), target, bool(reviewed)
+            )
         return approved, machine
 
     def history(self, segment_key: str) -> list[TranslationVersion]:
@@ -81,13 +136,65 @@ class PostgresTM:
 
     def review_item(self, segment_key: str) -> ReviewItem | None:
         row = self.conn.execute(
-            "SELECT segment_key, approved_key, state, current_version, site_id, updated_at"
-            " FROM review_item WHERE segment_key = %s",
+            "SELECT segment_key, approved_key, state, current_version, site_id, updated_at,"
+            " created_at, raised_by FROM review_item WHERE segment_key = %s",
             (segment_key,),
         ).fetchone()
         if row is None:
             return None
-        return ReviewItem(row[0], row[1], ReviewState(row[2]), row[3], row[4], row[5])
+        return ReviewItem(
+            row[0], row[1], ReviewState(row[2]), row[3], row[4], row[5], row[6], RaisedBy(row[7])
+        )
+
+    def pending_review(self, site_id: str | None = None) -> int:
+        return self._count("pending_review", site_id)
+
+    def owed(self, site_id: str | None = None) -> int:
+        return self._count("owed", site_id)
+
+    def _count(self, state: str, site_id: str | None) -> int:
+        row = self.conn.execute(
+            "SELECT count(*) FROM review_item WHERE state = %(state)s"
+            " AND (%(site)s::text IS NULL OR site_id = %(site)s)",
+            {"state": state, "site": site_id},
+        ).fetchone()
+        return int(row[0]) if row else 0
+
+    def release_owed(self, site_id: str, limit: int) -> int:
+        cur = self.conn.execute(
+            "UPDATE review_item SET state = 'pending_review', updated_at = now()"
+            " WHERE segment_key IN ("
+            "   SELECT segment_key FROM review_item WHERE state = 'owed' AND site_id = %s"
+            "    ORDER BY created_at, segment_key LIMIT %s FOR UPDATE SKIP LOCKED)",
+            (site_id, max(0, limit)),
+        )
+        return int(cur.rowcount)
+
+    def flag_for_review(
+        self,
+        *,
+        segment_key: str,
+        version_id: int,
+        site_id: str,
+        raised_by: RaisedBy,
+        daily_cap: int | None,
+        since: datetime,
+    ) -> FlagOutcome:
+        row = self.conn.execute(
+            _FLAG,
+            {
+                "segment_key": segment_key,
+                "version_id": version_id,
+                "site_id": site_id,
+                "raised_by": raised_by.value,
+                "cap": daily_cap,
+                "since": since,
+            },
+        ).fetchone()
+        state = row[0] if row else None
+        if state == "owed":
+            return FlagOutcome.OWED
+        return FlagOutcome.CREATED if state == "pending_review" else FlagOutcome.EXISTS
 
     def _ensure_segment(self, segment_key: str, masked_source: str) -> None:
         self.conn.execute(
@@ -116,7 +223,7 @@ class PostgresTM:
         term_ids: Iterable[str],
         tag_integrity: bool | None,
     ) -> Stored:
-        with self.conn.transaction():
+        with self._tx():
             self._ensure_segment(segment_key, masked_source)
             (vid,) = self.conn.execute(
                 "INSERT INTO translation_version (segment_key, lookup_key, origin,"
@@ -178,6 +285,7 @@ class PostgresTM:
                 " RETURNING r.approved_key, r.segment_key",
                 (terms,),
             ).fetchall()
+            self.conn.execute(_CLOSE_INVALIDATED)
         return Invalidation(
             tuple(sorted({r[0] for r in machine})),
             tuple(sorted({r[0] for r in approved})),
@@ -220,9 +328,12 @@ class PostgresTM:
         return int(row[0]) if row else 0
 
     def expire_machine(self, before: datetime) -> int:
-        cur = self.conn.execute(
-            "UPDATE translation_version SET invalidated_at = now()"
-            " WHERE origin = 'mt' AND invalidated_at IS NULL AND created_at < %s",
-            (before,),
-        )
-        return int(cur.rowcount)
+        with self.conn.transaction():
+            cur = self.conn.execute(
+                "UPDATE translation_version SET invalidated_at = now()"
+                " WHERE origin = 'mt' AND invalidated_at IS NULL AND created_at < %s",
+                (before,),
+            )
+            expired = int(cur.rowcount)
+            self.conn.execute(_CLOSE_INVALIDATED)
+        return expired

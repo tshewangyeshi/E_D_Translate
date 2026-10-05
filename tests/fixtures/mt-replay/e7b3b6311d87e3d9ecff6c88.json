@@ -1,0 +1,11 @@
+{
+  "source_wire": "A copy of your ⟦T:1⟧",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "xml",
+  "model_input": "A copy of your <e1/>",
+  "raw_output": "ཁྱོད་ཀྱི་ <e1> འདྲ་བཤུས།",
+  "ok": false,
+  "cause": "tag:malformed_marker",
+  "block_type": "list-item",
+  "recorded": "2026-10-05"
+}

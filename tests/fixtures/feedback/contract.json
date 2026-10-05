@@ -1,0 +1,6 @@
+{
+  "_comment": "What the error-report form may send and the server will keep (FR-430, FR-432). Read by pytest and by vitest, so the widget and the server cannot drift apart.",
+  "reasons": ["wrong_meaning", "wrong_term", "not_translated", "formatting", "offensive", "other"],
+  "max_comment_chars": 500,
+  "honeypot_field": "website"
+}

@@ -31,3 +31,8 @@ __pycache__/
 adapters/widget/dist/
 adapters/widget/test-results/
 adapters/widget/playwright-report/
+
+.gstack/
+
+# Local snapshot of the G2C portal (officials' contact details; never commit)
+tools/g2c_demo/data/

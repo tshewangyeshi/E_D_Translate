@@ -28,6 +28,8 @@ export interface SegmentResult {
   text: string;
   status: SegmentStatus;
   origin?: string;
+  /** Hash of the masked source, for reporting an error against it (FR-104). */
+  segmentKey?: string;
 }
 
 export interface ApiOptions {
@@ -39,6 +41,13 @@ export interface ApiOptions {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+/** Every request gives up eventually. Not in every supported WebView; falls back silently. */
+function deadline(options: ApiOptions): AbortSignal | undefined {
+  return typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+    ? AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+    : undefined;
+}
+
 async function request(
   options: ApiOptions,
   path: string,
@@ -46,11 +55,7 @@ async function request(
 ): Promise<unknown | null> {
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   if (typeof doFetch !== "function") return null;
-  // AbortSignal.timeout is not in every supported WebView; fall back silently.
-  const signal =
-    typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-      ? AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
-      : undefined;
+  const signal = deadline(options);
   try {
     const response = await doFetch(`${options.base}${path}`, { ...init, signal });
     if (!response.ok) return null;
@@ -119,6 +124,7 @@ export async function translateBatch(
       text: raw["text"],
       status: (raw["status"] as SegmentStatus) ?? "tag_fallback",
       ...(typeof raw["origin"] === "string" ? { origin: raw["origin"] } : {}),
+      ...(typeof raw["segment_key"] === "string" ? { segmentKey: raw["segment_key"] } : {}),
     });
   }
   return out;
@@ -126,4 +132,43 @@ export async function translateBatch(
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+/**
+ * Report a translation error (FR-430).
+ *
+ * Resolves true when the server accepted the request, which is NOT the same as
+ * the report being kept: 202 is returned whether it was stored, rate-limited,
+ * saturated or dropped as a honeypot hit, deliberately. The widget cannot know
+ * which, and must not pretend otherwise.
+ *
+ * It does not go through `request`, which parses JSON: a 202 has no body, so
+ * parsing would throw and a successful report would look like a failure. It
+ * keeps the same deadline, though: a request that never settles would leave
+ * the form open and the reader unthanked.
+ */
+export async function sendFeedback(
+  options: ApiOptions,
+  report: { segmentKey: string; reason: string; comment: string; website: string },
+): Promise<boolean> {
+  const doFetch = options.fetchImpl ?? globalThis.fetch;
+  if (typeof doFetch !== "function") return false;
+  try {
+    const response = await doFetch(`${options.base}/v1/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        site: options.site,
+        segment_key: report.segmentKey,
+        reason: report.reason,
+        ...(report.comment ? { comment: report.comment } : {}),
+        // The honeypot travels only when something filled it (FR-432).
+        ...(report.website ? { website: report.website } : {}),
+      }),
+      signal: deadline(options),
+    });
+    return response.ok;
+  } catch {
+    return false; // network failure or timeout: the reader is thanked either way
+  }
 }

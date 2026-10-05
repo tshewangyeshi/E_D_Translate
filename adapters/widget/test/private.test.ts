@@ -61,6 +61,7 @@ describe("data-dz-private on the page (NFR-304)", () => {
     expect(widget).not.toBe(null);
     expect(calls.some((url) => url.includes("/v1/config"))).toBe(true);
     expect(document.querySelector("[data-dz-control]")).not.toBe(null);
+    widget?.unwatch(); // or it goes on observing the next test's page
   });
 });
 

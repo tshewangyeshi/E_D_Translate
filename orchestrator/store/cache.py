@@ -6,14 +6,24 @@ The cache is an optimisation, never a dependency: every call on
 
 Values carry their origin (ER-1): the lookup service rejects machine output
 for Tier 1 even on a cache hit.
+
+The distinct-client counter is scoped to one UTC day, the same day the client
+hash's salt lives for. A count that outlived the salt would see one citizen
+who came back the next morning as two citizens, and after three mornings
+their personalised text would count as widely seen and go to the model.
+
+The day comes from the client hash itself (``day_of``), not from the clock at
+the moment of counting: a request that straddles midnight is hashed with one
+day's salt and must be counted in that same day's set.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
 from orchestrator.store.models import Origin, Stored
@@ -25,9 +35,29 @@ MACHINE_NS = "dzweb:m:"
 SEEN_NS = "dzweb:seen:"
 
 
+def utc_today() -> date:
+    return datetime.now(UTC).date()
+
+
+def day_of(client_hash: str, today: Callable[[], date] = utc_today) -> date:
+    """The UTC day a client hash was made on (``YYYY-MM-DD:<hex>``), or today."""
+    prefix, sep, _ = client_hash.partition(":")
+    if sep:
+        try:
+            return date.fromisoformat(prefix)
+        except ValueError:
+            pass
+    return today()
+
+
 def encode(value: Stored) -> str:
     return json.dumps(
-        {"v": value.version_id, "o": value.origin.value, "t": value.masked_target},
+        {
+            "v": value.version_id,
+            "o": value.origin.value,
+            "t": value.masked_target,
+            "r": value.review,
+        },
         ensure_ascii=False,
     )
 
@@ -35,7 +65,9 @@ def encode(value: Stored) -> str:
 def decode(raw: str | bytes) -> Stored | None:
     try:
         data = json.loads(raw)
-        return Stored(int(data["v"]), Origin(data["o"]), str(data["t"]))
+        # An entry written before "r" existed reads as not-yet-flagged: a
+        # Tier 2 serve then flags it once and rewrites the entry.
+        return Stored(int(data["v"]), Origin(data["o"]), str(data["t"]), data.get("r") is True)
     except (ValueError, KeyError, TypeError):
         return None  # corrupt entries are misses, never errors
 
@@ -74,10 +106,15 @@ class InMemoryCache:
 
 
 class InMemorySeenCounter:
-    def __init__(self) -> None:
+    def __init__(self, today: Callable[[], date] = utc_today) -> None:
+        self.today = today
         self.seen: dict[str, set[str]] = {}
+        self._day: date | None = None
 
     def observe(self, segment_key: str, client_hash: str) -> int:
+        day = day_of(client_hash, self.today)
+        if day != self._day:
+            self._day, self.seen = day, {}  # yesterday's hashes used yesterday's salt
         clients = self.seen.setdefault(segment_key, set())
         clients.add(client_hash)
         return len(clients)
@@ -108,12 +145,20 @@ class RedisCache:
 
 
 class RedisSeenCounter:
-    def __init__(self, client: Any, ttl_seconds: int = 86_400) -> None:
+    def __init__(
+        self,
+        client: Any,
+        ttl_seconds: int = 86_400,
+        today: Callable[[], date] = utc_today,
+    ) -> None:
         self.client = client
         self.ttl = ttl_seconds
+        self.today = today
 
     def observe(self, segment_key: str, client_hash: str) -> int:
-        key = SEEN_NS + segment_key
+        # The day is part of the key, so refreshing the TTL on every sighting
+        # cannot carry a count across the salt's rotation.
+        key = f"{SEEN_NS}{day_of(client_hash, self.today).isoformat()}:{segment_key}"
         pipe = self.client.pipeline()
         pipe.sadd(key, client_hash)
         pipe.expire(key, self.ttl)

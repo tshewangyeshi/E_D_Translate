@@ -1,0 +1,11 @@
+{
+  "source_wire": "⟦CUR:1⟧",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "xml",
+  "model_input": "<e1/>",
+  "raw_output": null,
+  "ok": false,
+  "cause": "upstream:UpstreamBadResponse",
+  "block_type": "table-cell",
+  "recorded": "2026-10-05"
+}

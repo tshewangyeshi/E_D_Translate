@@ -1,0 +1,11 @@
+{
+  "source_wire": "You must bring ⟦1⟧two⟦/1⟧ passport photographs and your ⟦2⟧original⟦/2⟧ certificate.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "You must bring {1}two{/1} passport photographs and your {2}original{/2} certificate.",
+  "raw_output": "ཁྱོད་ཀྱིས་ ལམ་ཡིག་གི་པར་གཉིས་དང་ ཁྱོད་རའི་ ངོ་མ་གི་ལག་ཁྱེར་ཚུ་འབག་དགོ།",
+  "ok": false,
+  "cause": "tag:tag_mismatch",
+  "block_type": "paragraph-with-emphasis",
+  "recorded": "2026-10-05"
+}

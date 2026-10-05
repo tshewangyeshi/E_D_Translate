@@ -1,5 +1,51 @@
 # TODOS
 
+## Translation quality
+
+### FR-144 sign-off
+
+**What:** Get the SRS owner's sign-off on FR-144 (the model translates amounts, dates, percentages and counts; values checked).
+
+**Why:** It narrows FR-140 and FR-142, and it is the default (`DZWEB_NUMBERS=model`). Until signed, `protected` is the conservative setting.
+
+**Context:** Product owner decision 2026-10-05 after 9 of 9 staging sentences kept every value. Row in `docs/00-requirements.md`.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** SRS owner
+
+### Native-reader review of the Dzongkha
+
+**What:** Have Dzongkha readers (DDC or GovTech linguists) score a sample of translations, e.g. 50 segments from `tools/g2c_demo`, for meaning and fluency.
+
+**Why:** Every measurement so far counts what passes our checks, not what reads well. Piece-by-piece translation keeps English order around links, which may read badly in Dzongkha.
+
+**Also:** the widget's own labels (`adapters/widget/test/labels.test.ts`). The toggle was misspelled "ryong kha" until 2026-10-05; the notice, report and pick labels were then rewritten by a non-native writer.
+
+**Effort:** M (mostly other people's time)
+**Priority:** P1
+**Depends on:** reviewers
+
+### Real glossary
+
+**What:** Load the DCDD termbase and measure glossary-term survival (design note option 3).
+
+**Why:** Glossary placeholders were the main S0.1 failure; the demo runs with an empty termbase.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** DCDD termbase
+
+### Dzongkha font on the pilot portal
+
+**What:** Ask GovTech to give `[lang|="dz"]` text a Dzongkha font on g2c.tech.gov.bt.
+
+**Why:** Its service documents pin Times New Roman, which has no Tibetan; translated text falls back to the very small Microsoft Himalaya on Windows.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** GovTech
+
 ## Review
 
 ### Codex outside review of the reconciled plan
@@ -29,6 +75,64 @@
 **Depends on:** None
 
 ## Before the pilot
+
+### Client-hash salt is per process
+
+**What:** Make every API process derive the same daily salt for the client hash, so the distinct-clients count means distinct citizens whichever replica answers.
+
+**Why:** `ClientHasher` (`orchestrator/api/app.py`) draws a random salt in memory. One citizen served by three replicas, or by one process restarted three times in a day, hashes three ways and is counted as three clients, which meets the NFR-304 threshold and sends their page to the model. With a single long-lived process the rule holds; the pilot will not run that way.
+
+**Context:** Found 2026-09-29 while writing the S3.4 tests. `test_nfr304_one_citizen_served_by_several_processes_is_one_client` is a strict `xfail`: it starts failing the build the moment the gap is closed, so the marker cannot be forgotten. Two ways to share a salt, and the choice is a security decision rather than a coding one: (a) keep the day's salt in Redis with an expiry, which puts it next to the hashes it protects; (b) derive it as `HMAC(deployment secret, day)`, which keeps it out of Redis but adds a secret to manage. Either way the counter is already scoped to one UTC day, so nothing outlives the salt. Take it to `/cso`.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** A decision on (a) or (b)
+
+### Confirm the review cap number with the SRS owner
+
+**What:** Confirm 500 request-raised review items per site per rolling day, and who runs `python -m orchestrator.ops.review_owed` and how often.
+
+**Why:** The behaviour past the cap was decided on 2026-09-29: the page is served and the item is opened as `owed`, out of the reviewers' queue until released. The number itself is a guess, and owed items only reach reviewers if someone releases them.
+
+**Context:** `StoreSettings.review_items_per_site_per_day`; `dzweb_review_owed` shows the backlog.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** SRS owner, DCDD reviewer capacity
+
+### Separate the migration owner role from the runtime role
+
+**What:** Run migrations as a role the service never uses, and run the API and worker as a role with INSERT and SELECT only on `audit_event`.
+
+**Why:** The append-only triggers refuse UPDATE, DELETE and TRUNCATE, but the table's owner can switch them off, rewrite a row and switch them back without trace. Today the service migrates with its own role, so it owns the table (found by the 2026-09-29 review).
+
+**Context:** `orchestrator/store/migrate.py` runs from `wiring.build()`. The change is a deployment and wiring change: a `DZWEB_MIGRATE_DSN`, a migrate step before the processes start, and grants in a migration. Take it to `/cso`.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** Deployment topology
+
+### Dzongkha wording for the personal-details hint
+
+**What:** Get DCDD to supply the Dzongkha for "Do not include names, ID numbers or contact details." and add it beside the English in `adapters/widget/src/locale-dz.ts`.
+
+**Why:** The report form's hint (NFR-303) is English only. A developer must not guess Dzongkha wording.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** DCDD
+
+### Worker metrics are not exported
+
+**What:** Export the background worker's counts (stored, invalid by cause, upstream retries, swept leases) the way the API exports its own.
+
+**Why:** `/v1/metrics` describes the live request path of the process that answers it. Most translation happens in the worker, which is a separate process with no HTTP surface, so its outcomes are visible only in the summary line it logs per batch (`worker claimed=… swept=… stored=… invalid:<cause>=…`).
+
+**Context:** `WorkerReport` in `orchestrator/queue/worker.py` already has the numbers per iteration. Options: a small metrics listener in the worker process, or periodic writes to a table the API reads. Decide with the operations dashboard (S9.3).
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
 
 ### PostgreSQL connection pool
 

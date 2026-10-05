@@ -1,11 +1,12 @@
 """Job queue contract: InMemoryQueue and PostgresJobQueue behave identically (S2.4).
 
-Requirements: FR-155, FR-156, FR-143, NFR-412.
+Requirements: FR-155, FR-156, FR-143, FR-511, FR-611, NFR-412.
 """
 
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -15,8 +16,10 @@ from orchestrator.queue.jobs import (
     PRIORITY_PREWARM,
     PRIORITY_REWARM,
     VALIDATION_FAILURE_PREFIX,
+    InMemoryQueue,
     Job,
 )
+from orchestrator.testing.rig import FakeClock
 
 
 def _job(n: int, priority: int = PRIORITY_LIVE_DEFERRED) -> Job:
@@ -133,6 +136,72 @@ def test_fr155_crashed_worker_job_is_swept_back_to_pending(work_queue: Any) -> N
     assert q.depth() == 0
 
 
+# --- FR-511: a job remembers whether its result must be flagged for review ---
+
+
+@pytest.mark.parametrize("review", [True, False])
+def test_fr511_the_review_flag_survives_the_queue(work_queue: Any, review: bool) -> None:
+    """The worker never saw the request, so the job is its only instruction."""
+    q, _ = work_queue
+    q.enqueue(replace(_job(1), review=review))
+    (c,) = q.claim("w1", 1, 60)
+    assert c.job.review is review
+
+
+def test_fr511_a_job_is_not_flagged_unless_someone_asked(work_queue: Any) -> None:
+    q, _ = work_queue
+    q.enqueue(_job(1))
+    (c,) = q.claim("w1", 1, 60)
+    assert c.job.review is False
+
+
+# --- FR-611: queue age ---
+
+
+def test_fr611_an_empty_queue_has_no_oldest_job(work_queue: Any) -> None:
+    q, _ = work_queue
+    assert q.oldest_pending_seconds() is None
+
+
+def test_fr611_oldest_pending_is_the_age_of_waiting_work_only(work_queue: Any) -> None:
+    q, _ = work_queue
+    q.enqueue(_job(1))
+    age = q.oldest_pending_seconds()
+    assert age is not None and 0 <= age < 30
+
+    (c,) = q.claim("w1", 1, 60)  # being worked on is not waiting
+    assert q.oldest_pending_seconds() is None
+    q.complete(c.id, "w1")
+    assert q.oldest_pending_seconds() is None
+
+
+def test_fr611_age_is_measured_from_when_the_job_was_queued_not_retried() -> None:
+    """A job that keeps failing must look old, not freshly arrived."""
+    clock = FakeClock()
+    q = InMemoryQueue(clock=clock)
+    q.enqueue(_job(1))
+    clock.advance(100)
+    (c,) = q.claim("w1", 1, 60)
+    q.fail(c.id, "w1", "upstream:UpstreamUnavailable", retry=True)
+    clock.advance(50)
+    q.enqueue(_job(2))
+    assert q.oldest_pending_seconds() == 150
+
+
+@pytest.mark.integration
+def test_fr611_postgres_age_is_measured_from_when_the_job_was_queued(pg_conn: Any) -> None:
+    from orchestrator.queue.postgres_queue import PostgresJobQueue
+
+    q = PostgresJobQueue(pg_conn)
+    q.enqueue(_job(1))
+    pg_conn.execute("UPDATE translation_job SET created_at = now() - interval '150 seconds'")
+    (c,) = q.claim("w1", 1, 60)
+    q.fail(c.id, "w1", "upstream:UpstreamUnavailable", retry=True)  # back to pending
+    q.enqueue(_job(2))
+    age = q.oldest_pending_seconds()
+    assert age is not None and 150 <= age < 180
+
+
 @pytest.mark.integration
 def test_fr155_concurrent_workers_never_claim_the_same_job(pg_conn: Any) -> None:
     import psycopg
@@ -165,3 +234,33 @@ def test_fr155_concurrent_workers_never_claim_the_same_job(pg_conn: Any) -> None
     all_ids = [i for ids in claimed.values() for i in ids]
     assert len(all_ids) == 200 and len(set(all_ids)) == 200
     assert sum(1 for ids in claimed.values() if ids) > 1  # work really was shared
+
+
+# --- FR-511: enqueueing an active key merges into it ---
+
+
+def test_fr511_a_duplicate_raises_the_review_flag_and_never_lowers_it(work_queue: Any) -> None:
+    q, _ = work_queue
+    q.enqueue(replace(_job(1), review=False))
+    q.enqueue(replace(_job(1), review=True))
+    q.enqueue(replace(_job(1), review=False))
+    (c,) = q.claim("w1", 1, 60)
+    assert c.job.review is True
+
+
+def test_fr155_a_duplicate_keeps_the_more_urgent_priority(work_queue: Any) -> None:
+    q, _ = work_queue
+    q.enqueue(_job(1, PRIORITY_PREWARM))
+    q.enqueue(_job(1, PRIORITY_LIVE_DEFERRED))  # a citizen is now waiting for it
+    q.enqueue(_job(1, PRIORITY_REWARM))
+    (c,) = q.claim("w1", 1, 60)
+    assert c.job.priority == PRIORITY_LIVE_DEFERRED
+
+
+def test_fr511_a_full_queue_still_merges_a_duplicate(work_queue: Any) -> None:
+    q, _ = work_queue
+    for n in range(100):
+        q.enqueue(_job(n))
+    assert q.enqueue(replace(_job(5), review=True)) is True
+    claimed = {c.job.machine_key: c.job for c in q.claim("w1", 100, 60)}
+    assert claimed[_job(5).machine_key].review is True

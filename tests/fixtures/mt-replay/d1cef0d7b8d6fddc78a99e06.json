@@ -1,0 +1,11 @@
+{
+  "source_wire": "For help, write to ⟦EMAIL:2⟧ or visit ⟦1⟧the help page⟦/1⟧.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "For help, write to {e2} or visit {1}the help page{/1}.",
+  "raw_output": "གྲོགས་རམ་གྱི་དོན་ལུ་ ཨེ ༢ ལུ་ཡི་གུ་གཏང་ ཡང་ན་ ཨེ ༡ ལུ་གྲོགས་རམ་གྱི་ངོ་ཤོག་ནང་གཟིགས་གནང་།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "paragraph-with-link",
+  "recorded": "2026-10-05"
+}

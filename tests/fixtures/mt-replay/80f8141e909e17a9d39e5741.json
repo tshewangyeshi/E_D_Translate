@@ -1,0 +1,11 @@
+{
+  "source_wire": "Fees and payment",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "live",
+  "model_input": "Fees and payment",
+  "raw_output": "འཐུས་དང་སྤྲོད་ནི།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "heading",
+  "recorded": "2026-10-05"
+}

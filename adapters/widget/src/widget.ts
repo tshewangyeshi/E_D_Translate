@@ -87,6 +87,9 @@ const PENDING_RETRY_MS = 8_000;
 /** Per-origin preference key. Persistence proper is S4.3. */
 const PREFERENCE_KEY = "dzweb.language";
 
+/** The widget's own UI, which is never page content: the toggle and the notice. */
+export const OWN_UI = "[data-dz-control], [data-dz-notice]";
+
 export class Widget {
   private readonly registry: Registry = new WeakMap<Element, BlockState>();
   private config: SiteConfig | null = null;
@@ -101,6 +104,12 @@ export class Widget {
   private translatedAttributes: Ref<Element>[] = [];
   private watching: Observation | null = null;
   private viewportObserver: IntersectionObserver | null = null;
+  /**
+   * Called each time machine output is written to the page, text or
+   * attribute. Whoever shows the machine-translation notice listens here, so
+   * the notice cannot miss output that arrives after the first pass (FR-520).
+   */
+  onMachineOutput: (() => void) | null = null;
 
   constructor(
     private readonly api: ApiOptions,
@@ -264,12 +273,12 @@ export class Widget {
         if (result.status !== "translated") continue; // English stays on the page
         const attr = sentAttrs.get(id);
         if (attr !== undefined) {
-          this.writeAttribute(attr.unit, attr.value, result.text, epoch);
+          this.writeAttribute(attr.unit, attr.value, result.text, epoch, result.origin);
           continue;
         }
         const record = sent.get(id);
         if (record === undefined) continue;
-        this.write(record, epoch, result.text, result.origin);
+        this.write(record, epoch, result.text, result.origin, result.segmentKey);
         // Writing is synchronous DOM work. Yielding every few blocks keeps any
         // single task short enough that a tap still feels immediate (ER-20).
         written += 1;
@@ -299,6 +308,7 @@ export class Widget {
     epoch: number,
     translated: string,
     origin: string | undefined,
+    segmentKey: string | undefined,
   ): void {
     const { segment, slots, generation } = record;
     if (this.epoch !== epoch || this.showing !== "dz") return;
@@ -310,8 +320,10 @@ export class Widget {
     state.segment = segment;
     state.lastWritten = readSlots(segment).map(stripForCompare);
     state.translated = true;
+    if (segmentKey !== undefined) state.segmentKey = segmentKey;
     this.translatedBlocks.push(makeRef(segment.block));
     markLanguage(segment.block, origin);
+    if (origin !== "human") this.onMachineOutput?.();
   }
 
   /** Apply a translated attribute, unless the host changed it meanwhile. */
@@ -320,9 +332,11 @@ export class Widget {
     valueWhenSent: string,
     translated: string,
     epoch: number,
+    origin: string | undefined,
   ): void {
     if (this.epoch !== epoch || this.showing !== "dz") return;
     if (!applyAttribute(unit.element, unit.attr, translated, valueWhenSent)) return;
+    if (origin !== "human") this.onMachineOutput?.();
     let byAttr = this.attributes.get(unit.element);
     if (byAttr === undefined) {
       byAttr = new Map<string, AttributeState>();
@@ -366,7 +380,7 @@ export class Widget {
     const element =
       node.nodeType === 1 ? (node as Element) : (node.parentElement ?? null);
     if (element === null || !element.isConnected) return null;
-    if (element.closest("[data-dz-control]") !== null) return null; // our own UI
+    if (element.closest(OWN_UI) !== null) return null; // our own UI
     // A known block wins, so a change lands on the unit we already track.
     //
     // The walk stops before the root. Reaching the root would return it as
@@ -407,6 +421,23 @@ export class Widget {
     }
     if (affected.length === 0 || this.showing !== "dz") return;
     void this.pass(this.epoch, true, affected);
+  }
+
+  /** True once any block on the page is showing machine output (FR-520). */
+  get showingMachineOutput(): boolean {
+    return this.translatedBlocks.some((ref) => {
+      const block = ref.deref();
+      return block !== undefined && block.getAttribute("lang") === "dz-x-mtfrom-en";
+    });
+  }
+
+  /** The reportable key for a block, if the widget translated it (FR-430). */
+  segmentKeyFor(block: Element): string | undefined {
+    for (let at: Element | null = block; at !== null; at = at.parentElement) {
+      const state = this.registry.get(at);
+      if (state?.translated) return state.segmentKey;
+    }
+    return undefined;
   }
 
   private stateFor(segment: Segment): BlockState {

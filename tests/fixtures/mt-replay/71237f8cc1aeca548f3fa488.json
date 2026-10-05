@@ -1,0 +1,11 @@
+{
+  "source_wire": "Read the ⟦1⟧eligibility rules⟦/1⟧ before you apply.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "live",
+  "model_input": "Read the <x1>eligibility rules</x1> before you apply.",
+  "raw_output": "ལྷག། <x1>འོས་འབབ་ཀྱི་བཅའ་ཡིག།</x1> ཁྱོད་ཀྱིས་ཞུ་ཡིག་མ་བཙུགས་པའི་ཧེ་མ།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "paragraph-with-link",
+  "recorded": "2026-10-05"
+}

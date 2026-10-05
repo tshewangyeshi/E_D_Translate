@@ -1,0 +1,11 @@
+{
+  "source_wire": "Full name",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Full name",
+  "raw_output": "མིང་ཧྲིལ་བུམ།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "form-label",
+  "recorded": "2026-10-05"
+}

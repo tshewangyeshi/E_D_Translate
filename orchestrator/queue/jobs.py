@@ -1,4 +1,6 @@
-"""Translation job queue (backlog S2.4). Requirements: FR-155, FR-156, FR-143, NFR-412.
+"""Translation job queue (backlog S2.4).
+
+Requirements: FR-155, FR-156, FR-143, FR-511, FR-611, NFR-412.
 
     enqueue ─► pending ─claim (SKIP LOCKED, lease)─► running ─complete─► done
                   ▲                                   │  │
@@ -7,11 +9,15 @@
                   └── sweep: lease expired (worker crashed) ◄── running
 
 * At most one ACTIVE job per machine_key; finished jobs don't block re-enqueueing.
+  Enqueueing a key that is already active merges into it: the job keeps the
+  more urgent priority and is flagged for review if either request asked.
 * Enqueue is skipped when a current machine translation already exists (ER-21)
   or the key failed validation recently (a deterministic model would fail again).
 * Bounded depth: a full queue refuses new work (the request still answers with
   source text, NFR-412).
 * Jobs carry MASKED text only (FR-143).
+* A job for a Tier 2 request carries ``review``: the worker stores on behalf of
+  a request it never saw, and the result must be flagged all the same (FR-511).
 
 ``InMemoryQueue`` and ``PostgresJobQueue`` pass the same contract tests.
 """
@@ -20,8 +26,10 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
+
+from orchestrator.store.models import RaisedBy
 
 PRIORITY_LIVE_DEFERRED = 50  # a citizen is waiting for this page
 PRIORITY_PREWARM = 100
@@ -29,6 +37,11 @@ PRIORITY_REWARM = 150
 
 VALIDATION_FAILURE_PREFIX = "validation:"
 FAILURE_MEMORY_SECONDS = 24 * 3600
+
+
+def raised_by(priority: int) -> RaisedBy:
+    """Who caused a job. Only work a page view caused counts against the review cap."""
+    return RaisedBy.REQUEST if priority <= PRIORITY_LIVE_DEFERRED else RaisedBy.OPERATOR
 
 
 @dataclass(frozen=True)
@@ -42,6 +55,7 @@ class Job:
     site_id: str
     model_version: str = ""
     priority: int = PRIORITY_LIVE_DEFERRED
+    review: bool = False  # flag the stored output for review (FR-511)
 
 
 @dataclass(frozen=True)
@@ -59,6 +73,14 @@ class JobQueue(Protocol):
         ...
 
     def depth(self) -> int: ...
+
+    def oldest_pending_seconds(self) -> float | None:
+        """Age of the oldest job still waiting, or None when nothing waits (FR-611).
+
+        Depth says how much work is queued; age says whether it is moving. A
+        short queue whose oldest job is an hour old is a stuck worker.
+        """
+        ...
 
 
 class WorkQueue(JobQueue, Protocol):
@@ -90,6 +112,7 @@ class _Row:
     lease_until: float | None = None
     last_error: str | None = None
     finished_at: float | None = None
+    created_at: float = 0.0
 
 
 class InMemoryQueue:
@@ -122,9 +145,21 @@ class InMemoryQueue:
     def depth(self) -> int:
         return sum(1 for r in self.rows.values() if r.state == "pending")
 
+    def oldest_pending_seconds(self) -> float | None:
+        waiting = [r.created_at for r in self.rows.values() if r.state == "pending"]
+        return max(0.0, self.clock() - min(waiting)) if waiting else None
+
     def enqueue(self, job: Job) -> bool:
         key = job.machine_key
-        if key in self.jobs or self.translated(key):
+        for r in self.rows.values():
+            if r.job.machine_key == key and r.state in ("pending", "running"):
+                r.job = replace(
+                    r.job,
+                    review=r.job.review or job.review,
+                    priority=min(r.job.priority, job.priority),
+                )
+                return True
+        if self.translated(key):
             return True
         now = self.clock()
         for r in self.rows.values():
@@ -138,7 +173,9 @@ class InMemoryQueue:
                 return True
         if self.depth() >= self.max_depth:
             return False
-        self.rows[self._next] = _Row(self._next, job, "pending", available_at=now)
+        self.rows[self._next] = _Row(
+            self._next, job, "pending", available_at=now, created_at=now
+        )
         self._next += 1
         return True
 

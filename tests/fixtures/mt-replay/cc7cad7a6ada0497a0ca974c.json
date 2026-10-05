@@ -1,0 +1,11 @@
+{
+  "source_wire": "Applications are ⟦1⟧not⟦/1⟧ accepted by email.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "live",
+  "model_input": "Applications are <x1>not</x1> accepted by email.",
+  "raw_output": "ཞུ་ཡིག་ཚུ་ཨིན། <x1>མེན།</x1> གློག་འཕྲིན་གྱི་ཐོག་ལས་ངོས་ལེན་འབད་ཡི།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "paragraph-with-emphasis",
+  "recorded": "2026-10-05"
+}

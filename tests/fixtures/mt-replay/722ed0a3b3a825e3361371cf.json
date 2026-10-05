@@ -1,0 +1,11 @@
+{
+  "source_wire": "Renew online at ⟦URL:2⟧ and pay ⟦1⟧⟦CUR:3⟧⟦/1⟧ by card.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "Renew online at {e2} and pay {1}{e3}{/1} by card.",
+  "raw_output": "ཨེན་ཊར་ནེཊ་༼e༢༽ ནང་ལུ་བསྐྱར་གསོ་འབད་དེ་ ཨང་ ༡ ༼e༣༽ ཨང་༡ ༼/༡༽ ཤོག་བྱང་གི་ཐོག་ལས་སྤྲོད།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "paragraph-with-link",
+  "recorded": "2026-10-05"
+}

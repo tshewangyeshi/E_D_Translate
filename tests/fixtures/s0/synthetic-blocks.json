@@ -1,0 +1,31 @@
+{
+  "_comment": "S0.1 placeholder-survival corpus, SYNTHETIC. Invented sentences in the style of public government pages, in the widget's wire format (inline tags as ⟦N⟧…⟦/N⟧, void elements as ⟦vN/⟧). Entity values come from synthetic-entities.json and cannot belong to a real person. Replace or extend with the pilot snapshots (tests/fixtures/gov-pages/) once they exist: a go/no-go measured on invented text is a first reading, not the decision.",
+  "blocks": [
+    {"type": "heading", "text": "Passport renewal"},
+    {"type": "heading", "text": "Fees and payment"},
+    {"type": "heading", "text": "Department of Immigration"},
+    {"type": "paragraph", "text": "Apply for a passport online and collect it from the nearest office."},
+    {"type": "paragraph", "text": "Pay Nu. 500 by 30 June 2026."},
+    {"type": "paragraph", "text": "The fee for a new citizenship certificate is Nu. 1,500."},
+    {"type": "paragraph", "text": "Applications received after 1st July 2026 will be processed within 10 working days."},
+    {"type": "paragraph", "text": "Quote your file reference DEMO-HR/2025/0457 in all correspondence."},
+    {"type": "paragraph", "text": "Your CID number 00012345678 must match the name on your application."},
+    {"type": "paragraph", "text": "Late applications attract a surcharge of 12.5% on the standard fee."},
+    {"type": "paragraph-with-link", "text": "Read the ⟦1⟧eligibility rules⟦/1⟧ before you apply."},
+    {"type": "paragraph-with-link", "text": "Download ⟦1⟧Form Five⟦/1⟧ and submit it to the ⟦2⟧Department of Immigration⟦/2⟧."},
+    {"type": "paragraph-with-link", "text": "For help, write to applications@portal.gov.example or visit ⟦1⟧the help page⟦/1⟧."},
+    {"type": "paragraph-with-link", "text": "Renew online at https://portal.gov.example/services/renewal and pay ⟦1⟧Nu. 500⟦/1⟧ by card."},
+    {"type": "paragraph-with-emphasis", "text": "Applications are ⟦1⟧not⟦/1⟧ accepted by email."},
+    {"type": "paragraph-with-emphasis", "text": "You must bring ⟦1⟧two⟦/1⟧ passport photographs and your ⟦2⟧original⟦/2⟧ certificate."},
+    {"type": "paragraph-with-break", "text": "Office hours:⟦v1/⟧Monday to Friday, 9 am to 5 pm."},
+    {"type": "table-cell", "text": "Processing fee"},
+    {"type": "table-cell", "text": "Nu. 1,500"},
+    {"type": "table-cell", "text": "Within 10 working days"},
+    {"type": "form-label", "text": "Full name"},
+    {"type": "form-label", "text": "Date of birth"},
+    {"type": "form-label", "text": "Mobile number"},
+    {"type": "list-item", "text": "A copy of your citizenship certificate"},
+    {"type": "list-item", "text": "Proof of payment of the fee"},
+    {"type": "list-item", "text": "Call 90000001 if your application is delayed."}
+  ]
+}

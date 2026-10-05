@@ -30,9 +30,22 @@ from orchestrator.testing.mock_nmt import MockNMT, Mode, UpstreamError
 RUNS = 10_000
 
 ENTITIES = [
-    "Nu. 500", "Nu. 1,500", "BTN 2500.50", "Ngultrum 300", "30 June 2026", "June 30, 2026",
-    "2026-06-30", "30/06/2026", "00012345678", "MoXX/DEMO/2026/123", "90000001", "12.5%",
-    "applications@portal.gov.example", "https://portal.gov.example/services/renewal", "1500", "7",
+    "Nu. 500",
+    "Nu. 1,500",
+    "BTN 2500.50",
+    "Ngultrum 300",
+    "30 June 2026",
+    "June 30, 2026",
+    "2026-06-30",
+    "30/06/2026",
+    "00012345678",
+    "MoXX/DEMO/2026/123",
+    "90000001",
+    "12.5%",
+    "applications@portal.gov.example",
+    "https://portal.gov.example/services/renewal",
+    "1500",
+    "7",
 ]
 WORDS = ["Pay", "the", "fee", "by", "at", "counter", "apply", "before", "online", "and", "office"]
 

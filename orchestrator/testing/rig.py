@@ -11,8 +11,9 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from orchestrator.api.app import create_app
+from orchestrator.api.app import ClientHasher, create_app
 from orchestrator.api.ratelimit import RateLimiter
+from orchestrator.governance.audit import InMemoryAuditLog
 from orchestrator.governance.sites import PathRule, Site, SiteRegistry
 from orchestrator.pipeline.glossary import Termbase
 from orchestrator.pipeline.segment import MODEL_FORMATS
@@ -30,6 +31,10 @@ TERMBASE = (
 )
 ORIGIN = "https://portal.gov.example"
 LEGAL_ORIGIN = "https://legal.gov.example"
+OPEN_ORIGIN = "https://open.gov.example"
+#: Operator token for /v1/health and /v1/metrics in tests (never a real secret).
+OPS_TOKEN = "test-ops-token"  # noqa: S105 - a fixed test value, never deployed
+OPS = {"Authorization": f"Bearer {OPS_TOKEN}"}
 
 
 @dataclass
@@ -40,6 +45,8 @@ class Rig:
     queue: InMemoryQueue
     translator: MockTranslator
     sites: SiteRegistry
+    audit: InMemoryAuditLog
+    seen: InMemorySeenCounter
 
 
 def make_rig(
@@ -50,13 +57,22 @@ def make_rig(
     clients_to_persist: int = 1,
     rps: float = 1000.0,
     queue_depth: int = 10_000,
+    review_cap: int = 500,
+    today: Any = None,
+    translate_kinds: frozenset[str] = frozenset(),
 ) -> Rig:
     tm, cache = InMemoryTM(), InMemoryCache()
+    audit = InMemoryAuditLog()
+    seen = InMemorySeenCounter(today) if today is not None else InMemorySeenCounter()
     store = TranslationStore(
         tm,
         ResilientCache(cache),
-        InMemorySeenCounter(),
-        StoreSettings(distinct_clients_to_persist=clients_to_persist),
+        seen,
+        StoreSettings(
+            distinct_clients_to_persist=clients_to_persist,
+            review_items_per_site_per_day=review_cap,
+        ),
+        audit=audit,
     )
     translator = MockTranslator(MODEL_FORMATS["wire"], modes=modes, delay_seconds=delay)
     queue = InMemoryQueue(max_depth=queue_depth)
@@ -68,7 +84,7 @@ def make_rig(
         queue=queue,
         quota=QuotaManager(requests_per_second=rps, worker_share=0.5),
         pipeline_version="p-test",
-        settings=ServiceSettings(live_budget_seconds=budget),
+        settings=ServiceSettings(live_budget_seconds=budget, translate_kinds=translate_kinds),
     )
     sites = SiteRegistry(
         [
@@ -80,9 +96,10 @@ def make_rig(
                 path_rules=(PathRule("/legal/*", 1),),
             ),
             Site("legal", frozenset({LEGAL_ORIGIN}), default_tier=1),
+            Site("open", frozenset({OPEN_ORIGIN}), default_tier=3),
         ]
     )
-    return Rig(service, tm, cache, queue, translator, sites)
+    return Rig(service, tm, cache, queue, translator, sites, audit, seen)
 
 
 def make_client(rig: Rig, *, client_host: str = "203.0.113.10", **limits: Any) -> TestClient:
@@ -92,6 +109,9 @@ def make_client(rig: Rig, *, client_host: str = "203.0.113.10", **limits: Any) -
         termbase_version="sample-2026.09.1",
         origin_limiter=limits.get("origin_limiter", RateLimiter(per_minute=60_000, burst=10_000)),
         client_limiter=limits.get("client_limiter", RateLimiter(per_minute=60_000, burst=10_000)),
+        hasher=limits.get("hasher") or ClientHasher(),
+        health=limits.get("health"),
+        ops_token=limits.get("ops_token", OPS_TOKEN),
     )
     return TestClient(app, client=(client_host, 50000))
 

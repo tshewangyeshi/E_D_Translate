@@ -282,15 +282,23 @@ class WireFormat:
         return Segment(tokenize(text, allow_entities=allow))
 
 
-_XML_TAG = re.compile(r"<(/?)([xe])(\d+)(/?)>")
-_XML_STRAY = re.compile(r"</?[xe]\d")
+_XML_TAG = re.compile(r"<\s*(/?)\s*([xXeE])\s*(\d+)\s*(/?)\s*>")
+_XML_STRAY = re.compile(r"<\s*/?\s*[xXeE]\s*\d")
 
 
 class XmlLikeFormat:
-    """Candidate B: XML-like tags (``<x1>…</x1>``, ``<x2/>``; entities as ``<e3/>``).
+    """Candidate B, chosen by S0.1: XML-like tags (``<x1>…</x1>``, ``<x2/>``; entities ``<e3/>``).
 
     Literal ``&``, ``<`` and ``>`` in text are entity-escaped so model output
     decodes unambiguously.
+
+    Decoding is lenient about the damage the GovTech model was measured to do
+    to tag *syntax* (docs/designs/s0-placeholder-survival.md): upper case
+    (``<E4/>``), inner spaces (``</x1 >``), a missing ``/`` on an entity or a
+    known void (``<e1>``). It is strict about tag *identity*: an unknown id, a
+    closing slash on an entity, or a tag-like fragment left in the text still
+    fails, and the validators after it still demand every placeholder exactly
+    once and in order.
     """
 
     name = "xml"
@@ -326,15 +334,23 @@ class XmlLikeFormat:
         for m in _XML_TAG.finditer(text):
             if m.start() > pos:
                 tokens.append(Text(self._unesc(text[pos : m.start()])))
-            slash, kind, num, self_closing = m.group(1), m.group(2), int(m.group(3)), m.group(4)
+            slash, kind, num, self_closing = (
+                m.group(1),
+                m.group(2).lower(),
+                int(m.group(3)),
+                m.group(4),
+            )
             if kind == "e":
-                if slash or not self_closing or num not in kinds:
+                # Entities are always void: <e1>, <e1/> and <E1 /> all mean entity 1.
+                if slash or num not in kinds:
                     raise SegmentError("malformed_marker", m.group(0))
                 tokens.append(Entity(kinds[num], num))
-            elif self_closing:
-                if slash or num not in voids:
+            elif num in voids:
+                if slash:
                     raise SegmentError("malformed_marker", m.group(0))
                 tokens.append(Void(num))
+            elif self_closing:
+                raise SegmentError("malformed_marker", m.group(0))  # not a void in the source
             else:
                 tokens.append(Close(num) if slash else Open(num))
             pos = m.end()
@@ -347,3 +363,41 @@ class XmlLikeFormat:
 
 
 MODEL_FORMATS: dict[str, ModelFormat] = {f.name: f for f in (WireFormat(), XmlLikeFormat())}
+
+#: The format the pilot uses (S0.1, 2026-10-05): the model keeps xml tag identity.
+DEFAULT_MODEL_FORMAT = "xml"
+
+_WORD = re.compile(r"[^\W\d_]")
+
+
+def has_words(segment: Segment) -> bool:
+    """True when some text outside the placeholders has a letter: something to translate.
+
+    A table cell holding only a fee, or a heading that is only a glossary term,
+    has none; sending it to the model can only make it worse.
+    """
+    return any(isinstance(t, Text) and _WORD.search(t.value) for t in segment.tokens)
+
+
+Piece = Open | Close | Void | Segment
+
+
+def split_at_tags(segment: Segment) -> list[Piece]:
+    """The segment cut at its inline tags: tags as they are, the text between as segments.
+
+    Entities stay inside the text they belong to. Joining the pieces back in
+    order (a tag as itself, a segment as its tokens) gives the segment again.
+    """
+    pieces: list[Piece] = []
+    run: list[Token] = []
+    for token in segment.tokens:
+        if isinstance(token, Open | Close | Void):
+            if run:
+                pieces.append(Segment(tuple(run)))
+                run = []
+            pieces.append(token)
+        else:
+            run.append(token)
+    if run:
+        pieces.append(Segment(tuple(run)))
+    return pieces

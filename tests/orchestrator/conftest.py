@@ -123,3 +123,33 @@ def redis_client() -> Iterator[Any]:
 
 requires_pg = _SKIP_PG
 requires_redis = _SKIP_REDIS
+
+
+@pytest.fixture(
+    params=[
+        "memory",
+        pytest.param("postgres", marks=[pytest.mark.integration, _SKIP_PG]),
+    ]
+)
+def report_store(request: pytest.FixtureRequest) -> Any:
+    """Both error-report stores, so the contract is proven on the real one too."""
+    from orchestrator.store.reports import InMemoryReportStore, PostgresReportStore
+
+    if request.param == "memory":
+        return InMemoryReportStore()
+    return PostgresReportStore(request.getfixturevalue("pg_conn"))
+
+
+@pytest.fixture(
+    params=[
+        "memory",
+        pytest.param("postgres", marks=[pytest.mark.integration, _SKIP_PG]),
+    ]
+)
+def audit_log(request: pytest.FixtureRequest) -> Any:
+    """Both audit logs, so append-only is proven on the one that matters."""
+    from orchestrator.governance.audit import InMemoryAuditLog, PostgresAuditLog
+
+    if request.param == "memory":
+        return InMemoryAuditLog()
+    return PostgresAuditLog(request.getfixturevalue("pg_conn"))
