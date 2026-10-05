@@ -15,12 +15,19 @@ DZWEB_MODEL_VERSION       the model behind the API, part of every cache key (FR-
                           The API does not report it: change this when GovTech
                           changes the model. Default "dsai-translationapi-1.0.0"
 DZWEB_WSO2_CONCURRENCY    parallel calls to the API, default 4
-DZWEB_MODEL_FORMAT        "wire" (default) or "xml" (decided by Sprint 0)
+DZWEB_MODEL_FORMAT        "xml" (default, chosen by S0.1 on 2026-10-05) or "wire"
 DZWEB_UPSTREAM_RPS        measured WSO2 limit (S0.2), default 5
 DZWEB_WORKER_SHARE        share reserved for the worker (FR-156), default 0.5
 DZWEB_AUDIT_ACTOR         who deployed this configuration (a person or a release id);
                           recorded as the actor of enrolment, tier-rule and termbase
                           changes (FR-620). Defaults to "config:<file name>"
+DZWEB_NUMBERS             "model" (default): amounts, dates, percentages and counts are
+                          translated by the model and every value is checked (FR-144);
+                          "protected": every number masked and restored unchanged (FR-140).
+                          IDs, phone numbers, references, emails and URLs are always protected
+DZWEB_DISTINCT_CLIENTS    how many different clients must see Tier 2 text before it is
+                          sent to the model or stored (NFR-304). Default 3; 1 only for
+                          a local demo with one browser
 DZWEB_OPS_TOKEN           bearer token for /v1/health and /v1/metrics; when unset they
                           answer 404 to everyone (FR-610, FR-611)
 
@@ -53,17 +60,18 @@ from orchestrator.governance.sites import SiteRegistry
 from orchestrator.ops.health import Probe, postgres_probe, queue_probe, redis_probe
 from orchestrator.ops.metrics import Gauges
 from orchestrator.pipeline.glossary import Termbase
-from orchestrator.pipeline.segment import MODEL_FORMATS, ModelFormat
+from orchestrator.pipeline.protect import TRANSLATABLE_KINDS
+from orchestrator.pipeline.segment import DEFAULT_MODEL_FORMAT, MODEL_FORMATS, ModelFormat
 from orchestrator.pipeline.version import pipeline_version
 from orchestrator.queue.postgres_queue import PostgresJobQueue
-from orchestrator.service.translate import TranslateService
+from orchestrator.service.translate import ServiceSettings, TranslateService
 from orchestrator.store.cache import (
     RedisCache,
     RedisSeenCounter,
     ResilientCache,
     ResilientSeenCounter,
 )
-from orchestrator.store.lookup import TranslationStore
+from orchestrator.store.lookup import StoreSettings, TranslationStore
 from orchestrator.store.migrate import LOCK_NAME, migrate, pending
 from orchestrator.store.pg import ReconnectingConnection, advisory_lock
 from orchestrator.store.postgres_tm import PostgresTM
@@ -94,6 +102,7 @@ def environment(dotenv: Path | None = None) -> dict[str, str]:
             env.setdefault(key.strip(), value.strip())
     return env
 
+
 #: Seconds. Short: they bound how long a dead dependency can hold a thread.
 CONNECT_TIMEOUT = 5
 OPS_STATEMENT_TIMEOUT_MS = 2000
@@ -117,6 +126,8 @@ class Settings:
     worker_share: float
     audit_actor: str = ""
     ops_token: str = ""
+    distinct_clients: int = 3
+    numbers: str = "model"
     wso2: Wso2Config | None = None
 
     @staticmethod
@@ -137,13 +148,17 @@ class Settings:
             sites=Path(env["DZWEB_SITES"]),
             translator=env.get("DZWEB_TRANSLATOR", ""),
             allow_mock=env.get("DZWEB_ALLOW_MOCK_TRANSLATOR") == "1",
-            model_format=env.get("DZWEB_MODEL_FORMAT", "wire"),
+            model_format=env.get("DZWEB_MODEL_FORMAT", DEFAULT_MODEL_FORMAT),
             upstream_rps=float(env.get("DZWEB_UPSTREAM_RPS", "5")),
             worker_share=float(env.get("DZWEB_WORKER_SHARE", "0.5")),
             audit_actor=env.get("DZWEB_AUDIT_ACTOR", ""),
             ops_token=env.get("DZWEB_OPS_TOKEN", ""),
+            distinct_clients=_positive(env, "DZWEB_DISTINCT_CLIENTS", 3),
+            numbers=env.get("DZWEB_NUMBERS", "model"),
             wso2=_wso2(env),
         )
+        if settings.numbers not in ("model", "protected"):
+            raise ConfigError("DZWEB_NUMBERS must be 'model' or 'protected'")
         if settings.model_format not in MODEL_FORMATS:
             raise ConfigError(f"DZWEB_MODEL_FORMAT must be one of {sorted(MODEL_FORMATS)}")
         return settings
@@ -167,6 +182,16 @@ def build_translator(settings: Settings, fmt: ModelFormat) -> Translator:
         "DZWEB_TRANSLATOR must be 'wso2' (the GovTech API) or 'mock'; "
         "for local development use DZWEB_TRANSLATOR=mock with DZWEB_ALLOW_MOCK_TRANSLATOR=1"
     )
+
+
+def _positive(env: Mapping[str, str], key: str, default: int) -> int:
+    try:
+        value = int(env.get(key, str(default)))
+    except ValueError as err:
+        raise ConfigError(f"{key} must be a whole number") from err
+    if value < 1:
+        raise ConfigError(f"{key} must be at least 1")
+    return value
 
 
 def _wso2(env: Mapping[str, str]) -> Wso2Config | None:
@@ -221,9 +246,7 @@ def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
     termbase = Termbase.load(settings.termbase)
     sites = SiteRegistry.load(settings.sites)
     conn = ReconnectingConnection(
-        lambda: psycopg.connect(
-            settings.pg_dsn, autocommit=True, connect_timeout=CONNECT_TIMEOUT
-        )
+        lambda: psycopg.connect(settings.pg_dsn, autocommit=True, connect_timeout=CONNECT_TIMEOUT)
     )
     if apply_migrations:
         migrate(conn)
@@ -248,6 +271,7 @@ def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
         PostgresTM(conn),
         ResilientCache(RedisCache(client)),
         ResilientSeenCounter(RedisSeenCounter(client)),
+        StoreSettings(distinct_clients_to_persist=settings.distinct_clients),
         audit=audit,
         atomic=conn.transaction,  # a change and its audit record commit together
     )
@@ -263,6 +287,9 @@ def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
         queue=queue,
         quota=quota,
         pipeline_version=pipeline_version(),
+        settings=ServiceSettings(
+            translate_kinds=TRANSLATABLE_KINDS if settings.numbers == "model" else frozenset()
+        ),
     )
     return Components(
         service,
@@ -311,9 +338,7 @@ def record_configuration(c: Components) -> list[RecordedEvent]:
     actor = c.settings.audit_actor
     termbase_file = c.settings.termbase
     with advisory_lock(c.conn, LOCK_NAME):
-        recorded = audit_site_changes(
-            c.audit, c.sites, actor or f"config:{c.settings.sites.name}"
-        )
+        recorded = audit_site_changes(c.audit, c.sites, actor or f"config:{c.settings.sites.name}")
         loaded = audit_termbase_load(
             c.audit,
             c.termbase.version,

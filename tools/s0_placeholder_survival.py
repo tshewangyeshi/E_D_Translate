@@ -22,6 +22,10 @@ Candidate formats:
   xml    <x1>…</x1>, <e1/>       (pipeline/segment.py)
   brace  {1}…{/1}, {e1}          (here only; moved into the pipeline if it wins)
 
+Live variant, the pipeline as adopted on 2026-10-05:
+  live   xml, lenient decoding, placeholder-only text not sent, text with inline
+         tags sent piece by piece (orchestrator/service/model_call.py)
+
 Replay-only variants, scored from the ``xml`` recordings without new calls:
   xml-lenient       accepts the damage the model does to tag syntax but not to
                     tag identity: case, inner spaces, a missing ``/`` on an
@@ -68,6 +72,7 @@ from orchestrator.pipeline.segment import (  # noqa: E402
     parse,
 )
 from orchestrator.pipeline.tags import check_tags  # noqa: E402
+from orchestrator.service.model_call import translate_segment  # noqa: E402
 from orchestrator.upstream.errors import UpstreamError  # noqa: E402
 from orchestrator.wiring import ConfigError, Settings, environment  # noqa: E402
 
@@ -176,6 +181,7 @@ def has_words(segment: Segment) -> bool:
 
 
 FORMATS: dict[str, ModelFormat] = {**MODEL_FORMATS, "brace": BraceFormat()}
+LIVE = "live"
 REPLAY_ONLY = {"xml-lenient": "xml", "xml-lenient-skip": "xml"}
 
 
@@ -246,13 +252,17 @@ async def measure(blocks: list[dict[str, str]], formats: list[str]) -> list[Outc
             masked, entities = mask(source)
             with_terms, terms = substitute(masked, termbase)
             for name in formats:
-                fmt = FORMATS[name]
+                fmt = MODEL_FORMATS["xml"] if name == LIVE else FORMATS[name]
                 model_input = fmt.encode(with_terms)
                 started = time.perf_counter()
                 raw: str | None = None
                 try:
-                    raw = await translator.translate(model_input, with_terms)
-                    decoded = fmt.decode(raw, with_terms)
+                    if name == LIVE:
+                        decoded = await translate_segment(translator, fmt, with_terms)
+                        raw = fmt.encode(decoded)
+                    else:
+                        raw = await translator.translate(model_input, with_terms)
+                        decoded = fmt.decode(raw, with_terms)
                     restored = restore(decoded, with_terms, entities)
                     restored = restore_terms(restored, with_terms, terms)
                     check_tags(restored, with_terms)
@@ -335,13 +345,13 @@ def rescore(blocks: list[dict[str, str]], formats: list[str]) -> list[Outcome]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("corpus", nargs="?", type=Path, default=CORPUS)
-    choices = list(FORMATS) + list(REPLAY_ONLY)
+    choices = [*FORMATS, LIVE, *REPLAY_ONLY]
     parser.add_argument("--formats", nargs="+", default=None, choices=choices)
     parser.add_argument("--replay", action="store_true", help="re-score recordings; no API calls")
     args = parser.parse_args(argv)
     blocks = json.loads(args.corpus.read_text(encoding="utf-8"))["blocks"]
     if args.replay:
-        formats = args.formats or choices
+        formats = [f for f in (args.formats or choices) if f != LIVE]
         print(report(rescore(blocks, formats), formats))
         return 0
     args.formats = [f for f in (args.formats or list(FORMATS)) if f not in REPLAY_ONLY]

@@ -110,7 +110,7 @@ def test_fr430_every_declared_reason_is_accepted(report_store: Any, reason: str)
 @pytest.mark.parametrize(
     ("comment", "stored"),
     [
-        ("my CID is 11502001234, call 17123456", "my CID is [cid], call [num]"),
+        ("my CID is 11502001234, call 17123456", "my CID is [cid], call [phone]"),
         ("write to someone@example.bt", "write to [email]"),
         ("see https://portal.gov.example/x", "see [url]"),
         ("the fee word is wrong", "the fee word is wrong"),

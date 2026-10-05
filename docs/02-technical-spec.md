@@ -167,6 +167,8 @@ The pattern set is **data, versioned with the pipeline**: any change alters `pip
 
 Masked form: `⟦NUM:3⟧`. The mapping is held per segment and per request, never global, and never persisted [ER-12].
 
+**Numbers mode (FR-144, proposed 2026-10-05).** With `DZWEB_NUMBERS=model`, the default, `CUR`, `DATE`, `PCT` and `NUM` spans are not masked: the model writes them the Dzongkha way, in Tibetan digits. Check 3 below then compares numbers **by value** instead of rejecting every numeral: `number_values()` of source and output must be equal (any script; thousands separators and leading zeros ignored; `9:00` equals `9`; digits after a Latin letter, as in `G2C`, are part of a name). The one allowance: a month named inside a date may come back as its number. `URL` (with a scheme or a bare `www.` host), `EMAIL`, `CID`, `PHONE` and `REF` are always masked and restored byte-identical. `DZWEB_NUMBERS=protected` keeps everything masked, as described here.
+
 **Restoration validation (FR-141) [ER-10, ER-9].** After restoration, the segment is accepted only if **all** of these hold; otherwise the **source text** is returned with `status: "entity_check_failed"`. It is never partially restored.
 1. **Exact multiset:** the entity tokens in the model output equal the input set exactly: every id present once, no duplicates, no unknown ids, no partial or unterminated tokens. The same validator (shared code) checks tag placeholders.
 2. **Byte identity:** every restored entity is byte-identical to its source.
@@ -213,7 +215,7 @@ gfp = sha256("|".join(f"{t.term_id}:{t.term_version}"
 
 ### 2.6 Cache and translation memory (FR-150..151, 410..411)
 
-**Everything stored is masked [ER-12].** Keys, Redis values and TM rows hold masked text (`⟦TYPE:n⟧` entities, `⟦T:n⟧` terms, wire tag markers). Real entity values never enter Redis or PostgreSQL. Each response is restored from **that request's** entity map and then validated (§2.4). As a side effect, "Pay Nu. 500" and "Pay Nu. 600" share one entry and one upstream call.
+**Everything stored is masked [ER-12].** Keys, Redis values and TM rows hold masked text (`⟦TYPE:n⟧` entities, `⟦T:n⟧` terms, wire tag markers). Real entity values never enter Redis or PostgreSQL. Each response is restored from **that request's** entity map and then validated (§2.4). As a side effect, "Pay Nu. 500" and "Pay Nu. 600" share one entry and one upstream call. *Under FR-144's model mode, amounts, dates, percentages and counts are translated rather than restored, so they are part of the stored text and those two sentences are two entries; identifiers stay masked.*
 
 ```python
 def segment_hash(masked: str) -> str:            # canonical id, a.k.a. segment_key

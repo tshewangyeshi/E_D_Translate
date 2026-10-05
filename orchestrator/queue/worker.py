@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from orchestrator.pipeline.segment import ModelFormat, SegmentError, parse
 from orchestrator.pipeline.validate import validate_output
 from orchestrator.queue.jobs import VALIDATION_FAILURE_PREFIX, ClaimedJob, WorkQueue, raised_by
+from orchestrator.service.model_call import translate_segment
 from orchestrator.store.keys import SegmentKeys
 from orchestrator.store.lookup import TranslationStore
 from orchestrator.store.models import ReviewRequest
@@ -120,16 +121,23 @@ class Worker:
             )
             return "bad_source"
         try:
-            raw = await asyncio.wait_for(
-                self.translator.translate(self.fmt.encode(source), source), self.call_timeout
+            # Same as the live path: placeholder-only text is not sent, text with
+            # inline tags is sent piece by piece (orchestrator/service/model_call.py).
+            decoded = await asyncio.wait_for(
+                translate_segment(self.translator, self.fmt, source), self.call_timeout
             )
         except (UpstreamError, TimeoutError) as err:
             self.queue.fail(
                 claimed.id, self.worker_id, f"upstream:{type(err).__name__}", retry=True
             )
             return "upstream_retry"
+        except SegmentError as err:
+            cause = getattr(err, "reason", None) or err.cause
+            self.queue.fail(
+                claimed.id, self.worker_id, f"{VALIDATION_FAILURE_PREFIX}{cause}", retry=False
+            )
+            return f"invalid:{cause}"
         try:
-            decoded = self.fmt.decode(raw, source)
             validate_output(decoded, source)
         except SegmentError as err:
             cause = getattr(err, "reason", None) or err.cause

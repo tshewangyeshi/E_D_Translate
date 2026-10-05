@@ -362,9 +362,11 @@ def test_fr611_entity_failures_lower_entity_preservation_only() -> None:
 
 
 def test_fr611_tag_failures_lower_tag_integrity_only() -> None:
-    rig = make_rig(modes={Mode.DROP: 1.0})
+    # Inline tags are never sent now (they are put back by us), so a "tag"
+    # failure is a placeholder the model left unreadable.
+    rig = make_rig(modes={Mode.TRUNCATE: 1.0})
     client = make_client(rig)
-    _translate(client, "Read the ⟦1⟧full notice⟦/1⟧ first")
+    _translate(client, "Pay Nu. 500 today")
     m = _metrics(client)
     assert m['dzweb_model_outputs_total{result="tag_fallback"}'] == 1
     assert m["dzweb_tag_integrity_ratio"] == 0.0

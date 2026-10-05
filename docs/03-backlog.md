@@ -31,7 +31,7 @@ Requirements: FR-120, FR-122, FR-140, FR-141 · measurement task [ER-O1]
 - [ ] Ask the NMT operator whether custom tokens exist in the deployed tokenizer; record the answer
 - [ ] ~20 public pilot-portal page snapshots committed to `tests/fixtures/gov-pages/` (personal data replaced with `synthetic-entities.json` values)
 - [ ] Each masked block sent to WSO2 **once** per candidate format (at least 3, e.g. `⟦N⟧`, `<x1/>`-style, spelled sentinels); raw responses recorded to `tests/fixtures/mt-replay/`, keyed by source hash + model version + format — *first reading done 2026-10-05 on a synthetic 26-block corpus, three formats (wire, xml, brace), 78 recordings; repeat on the pilot snapshots*
-- [ ] Report: survival rate per format; block fallback rate by cause (entity lost / altered / duplicated / invented, tag lost / duplicated / reordered, text in non-existent run, glossary term missing, leak scan hit, upstream error) and by block type (heading, paragraph, paragraph-with-link, table cell, form label, list item) — *first reading: `docs/designs/s0-placeholder-survival.md`. Best variant 65% usable (lenient xml decoder + placeholder-only skip, replayed), below the proposed 80%*
+- [ ] Report: survival rate per format; block fallback rate by cause (entity lost / altered / duplicated / invented, tag lost / duplicated / reordered, text in non-existent run, glossary term missing, leak scan hit, upstream error) and by block type (heading, paragraph, paragraph-with-link, table cell, form label, list item) — *first reading: `docs/designs/s0-placeholder-survival.md`. Best variant 65% usable (lenient xml decoder + placeholder-only skip, replayed), below the proposed 80%. Adopted pipeline (lenient xml, skip, pieces): 81% on the synthetic corpus; 261 of 264 segments (98.9%) on a local copy of the pilot's life-events pages, 2026-10-05*
 - [ ] **Gate before S1.5:** masker recall 100% on a held-out set of pages; leak scan 0; block fallback ≤ agreed threshold (proposed 20%). Decision recorded in the repo
 - [ ] S1.4 mock modes and rates are calibrated from these recordings
 *gstack:* `/spec` → run → decision recorded; `/codex` second opinion if GovTech policy allows (see `TODOS.md`)
@@ -95,6 +95,8 @@ Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
 - [x] Hypothesis property tests: entity-rich sentences mask and restore byte-identical; any digit run in any script is masked
 - [x] Recall tool (`tools/masker_recall.py`, in `make check`): 100% on a synthetic labelled set with held-out split
 - [ ] Masker recall on **hand-labelled pilot snapshots** with a held-out set — *waits for Sprint 0 snapshots (S0.1)*
+- [x] **FR-144 (proposed):** amounts, dates, percentages and counts translated by the model, values checked in any script (`DZWEB_NUMBERS`, default `model`); phone numbers a masked kind of their own (`PHONE`); bare `www.` addresses masked as `URL` (`tests/orchestrator/test_numbers.py`) — *awaits SRS sign-off*
+- [x] Values after a label ("Email ID: …") or in brackets at the end of a piece are not sent to the model; only the words are (`orchestrator/service/model_call.py`)
 - [x] The adversarial mock cannot produce an altered entity in output — 10,000 seeded runs across both candidate token formats (`tests/orchestrator/gates/test_entity_gate.py`); verified by mutation to catch the merged-number bug
 *gstack:* `/spec` → implement → `/review` → `/codex` (second opinion if policy allows — this is the highest-consequence module)
 

@@ -1,5 +1,49 @@
 # TODOS
 
+## Translation quality
+
+### FR-144 sign-off
+
+**What:** Get the SRS owner's sign-off on FR-144 (the model translates amounts, dates, percentages and counts; values checked).
+
+**Why:** It narrows FR-140 and FR-142, and it is the default (`DZWEB_NUMBERS=model`). Until signed, `protected` is the conservative setting.
+
+**Context:** Product owner decision 2026-10-05 after 9 of 9 staging sentences kept every value. Row in `docs/00-requirements.md`.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** SRS owner
+
+### Native-reader review of the Dzongkha
+
+**What:** Have Dzongkha readers (DDC or GovTech linguists) score a sample of translations, e.g. 50 segments from `tools/g2c_demo`, for meaning and fluency.
+
+**Why:** Every measurement so far counts what passes our checks, not what reads well. Piece-by-piece translation keeps English order around links, which may read badly in Dzongkha.
+
+**Effort:** M (mostly other people's time)
+**Priority:** P1
+**Depends on:** reviewers
+
+### Real glossary
+
+**What:** Load the DCDD termbase and measure glossary-term survival (design note option 3).
+
+**Why:** Glossary placeholders were the main S0.1 failure; the demo runs with an empty termbase.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** DCDD termbase
+
+### Dzongkha font on the pilot portal
+
+**What:** Ask GovTech to give `[lang|="dz"]` text a Dzongkha font on g2c.tech.gov.bt.
+
+**Why:** Its service documents pin Times New Roman, which has no Tibetan; translated text falls back to the very small Microsoft Himalaya on Windows.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** GovTech
+
 ## Review
 
 ### Codex outside review of the reconciled plan

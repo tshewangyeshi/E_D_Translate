@@ -51,6 +51,7 @@ from orchestrator.pipeline.protect import EntityCheckError, EntityMap, mask, res
 from orchestrator.pipeline.segment import Entity, ModelFormat, Segment, SegmentError, parse
 from orchestrator.pipeline.tags import check_tags
 from orchestrator.queue.jobs import PRIORITY_LIVE_DEFERRED, Job, JobQueue
+from orchestrator.service.model_call import calls_needed, translate_segment
 from orchestrator.service.status import Status
 from orchestrator.store.keys import SegmentKeys, Versions, keys_for
 from orchestrator.store.lookup import Hit, LookupItem, TranslationStore
@@ -87,6 +88,9 @@ class ServiceSettings:
     live_budget_seconds: float = 1.5  # FR-155
     source_lang: str = "en"
     target_lang: str = "dz"
+    #: Entity kinds left for the model to translate, values checked (FR-144).
+    #: Empty means every number is masked and restored byte-identical (FR-140).
+    translate_kinds: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -166,7 +170,7 @@ class TranslateService:
                 out[n] = self._fail(
                     p.seg_in, p.keys, Status.PENDING_MT, "awaiting_distinct_clients"
                 )
-            elif self.quota.try_live():
+            elif self.quota.try_live(calls_needed(p.with_terms)):  # one token per model call
                 live.append(n)
             else:
                 out[n] = self._defer(site, p, "no_live_quota")
@@ -198,7 +202,7 @@ class TranslateService:
 
     def _prepare(self, site: Site, seg_in: SegmentIn, path: object = None) -> _Prepared:
         source = parse(seg_in.text)  # client input: entity tokens are rejected (S1.2)
-        masked, entities = mask(source)
+        masked, entities = mask(source, self.settings.translate_kinds)
         with_terms, terms = substitute(masked, self.termbase)
         keys = keys_for(with_terms, fingerprint(terms.values()), self.versions)
         tier = resolve_tier(site, seg_in.tier, seg_in.selector_tier, path)
@@ -252,9 +256,7 @@ class TranslateService:
         self, site: Site, items: dict[int, _Prepared]
     ) -> dict[int, SegmentOut]:
         tasks = {
-            n: asyncio.create_task(
-                self.translator.translate(self.fmt.encode(p.with_terms), p.with_terms)
-            )
+            n: asyncio.create_task(translate_segment(self.translator, self.fmt, p.with_terms))
             for n, p in items.items()
         }
         done, pending = await asyncio.wait(
@@ -270,7 +272,14 @@ class TranslateService:
                 out[n] = self._defer(site, p, "live_budget_exceeded")
                 continue
             try:
-                raw = task.result()
+                decoded = task.result()
+            except SegmentError as err:
+                # The model answered, but its markers could not be read: nothing
+                # further was checked, the glossary included.
+                self.upstream.succeeded()
+                self.metrics.model_outputs[Status.TAG_FALLBACK.value] += 1
+                out[n] = self._fail(p.seg_in, p.keys, Status.TAG_FALLBACK, _reason(err))
+                continue
             except UpstreamError as err:
                 self._upstream_failed(type(err).__name__)
                 self._enqueue(site, p)  # retry in the background
@@ -280,21 +289,16 @@ class TranslateService:
                 self._upstream_failed(type(err).__name__)
                 out[n] = self._fail(p.seg_in, p.keys, Status.UPSTREAM_ERROR, type(err).__name__)
                 continue
-            self.upstream.succeeded()
-            out[n] = self._accept_model_output(site, p, raw)
+            if calls_needed(p.with_terms):
+                self.upstream.succeeded()
+            out[n] = self._accept_model_output(site, p, decoded)
         return out
 
     def _upstream_failed(self, kind: str) -> None:
         self.upstream.failed(kind)
         self.metrics.upstream_errors[kind] += 1
 
-    def _accept_model_output(self, site: Site, p: _Prepared, raw: str) -> SegmentOut:
-        try:
-            decoded = self.fmt.decode(raw, p.with_terms)
-        except SegmentError as err:
-            # Unreadable markers: nothing further was checked, the glossary included.
-            self.metrics.model_outputs[Status.TAG_FALLBACK.value] += 1
-            return self._fail(p.seg_in, p.keys, Status.TAG_FALLBACK, _reason(err))
+    def _accept_model_output(self, site: Site, p: _Prepared, decoded: Segment) -> SegmentOut:
         try:
             final = self._finalise(p, decoded)
         except SegmentError as err:

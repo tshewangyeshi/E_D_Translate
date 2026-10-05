@@ -59,6 +59,7 @@ def make_rig(
     queue_depth: int = 10_000,
     review_cap: int = 500,
     today: Any = None,
+    translate_kinds: frozenset[str] = frozenset(),
 ) -> Rig:
     tm, cache = InMemoryTM(), InMemoryCache()
     audit = InMemoryAuditLog()
@@ -83,7 +84,7 @@ def make_rig(
         queue=queue,
         quota=QuotaManager(requests_per_second=rps, worker_share=0.5),
         pipeline_version="p-test",
-        settings=ServiceSettings(live_budget_seconds=budget),
+        settings=ServiceSettings(live_budget_seconds=budget, translate_kinds=translate_kinds),
     )
     sites = SiteRegistry(
         [

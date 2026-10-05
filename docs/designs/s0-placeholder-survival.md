@@ -51,7 +51,52 @@ emphasis 0/2.
 - **Without masking** the model rewrites numbers into Tibetan digits and
   reorders them (probe, "Pay Nu. 500 by 30 June 2026"). Masking stays.
 
-## Options to reach the gate (decisions, not done)
+## Adopted 2026-10-05, and measured
+
+The product owner chose options 1 and 2 below, and confirmed GovTech's model
+was not trained with any "do not translate" marker (option 4 is closed).
+
+- xml is the default format, decoded leniently (`orchestrator/pipeline/segment.py`);
+- text with no words outside its placeholders is not sent;
+- text with inline tags is sent piece by piece, and the tags are put back by
+  the service (`orchestrator/service/model_call.py`).
+
+Measured against staging with `--formats live`, same 26 blocks:
+**21/26 usable (81%)**, just over the proposed 80% gate. Links, emphasis and
+line breaks: 7/7. Remaining failures: four in blocks with a glossary term
+(`fee`, masked as a placeholder: the model cannot translate around it), one
+where a fee followed by a date lost a placeholder. The price of pieces is
+fluency: each piece is translated without the rest of its sentence.
+
+## The pilot's own pages, 2026-10-05
+
+A local copy of https://g2c.tech.gov.bt/g2cportal/ListOfLifeEventComponent
+(`tools/g2c_demo/`, content from the portal's own API) was translated through
+the widget against staging: the life-events page and ten of its eleven
+services (the 300 KB business guide was left out to spare the quota).
+
+Failures found on the way, all but three of them ours, each fixed with tests
+(eleven pages before the last two fixes: 259 of 266, 97.4%):
+
+| Seen | Cause | Fix |
+|---|---|---|
+| "check the judiciary website www.judiciary.gov.bt" | bare `www.` host not masked; the leak scan then rejected the model's faithful copy | `URL` matches bare `www.` hosts |
+| "the G2C portal" | the model translated the name by its meaning; the check counted its 2 as lost | digits after a Latin letter are a name |
+| "Email ID: …", "Phone number: …", "(www.citizenservices.gov.bt)" | with little else to translate, the model wrote the placeholder in Tibetan letters (`<ཨི་༢/>`) | values after a label or in brackets at the end are not sent |
+| "(45mm x 35mm)" | digits before a unit were split by the name rule | only digits *after* a letter are a name |
+| "9:00 am to 12:00 pm" | the model wrote "9 to 12" | `9:00` equals `9` |
+
+Second pass: **261 of 264 (98.9%)**. The three left are long academic
+paragraphs where the model dropped a citation year ("TANG Yu-fang, 2009"):
+content was lost, so English is the right answer. Next: send long paragraphs
+sentence by sentence.
+
+Found on the way: the portal's service documents pin Times New Roman on every
+run. It has no Tibetan, so on Windows translated text falls back to the very
+small Microsoft Himalaya. The portal needs a Dzongkha font for `[lang|="dz"]`
+(the copy uses Noto Serif Tibetan, as the portal already loads).
+
+## Options considered
 
 1. **Adopt the lenient XML decoder and the placeholder-only skip** in the
    pipeline. Measured gain: 27% → 65%. Touches the guarded
