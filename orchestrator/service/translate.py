@@ -55,7 +55,7 @@ from orchestrator.service.status import Status
 from orchestrator.store.keys import SegmentKeys, Versions, keys_for
 from orchestrator.store.lookup import Hit, LookupItem, TranslationStore
 from orchestrator.store.models import Origin, RaisedBy, ReviewRequest
-from orchestrator.testing.mock_nmt import UpstreamError
+from orchestrator.upstream.errors import UpstreamError
 from orchestrator.upstream.quota import QuotaManager
 from orchestrator.upstream.translator import Translator
 

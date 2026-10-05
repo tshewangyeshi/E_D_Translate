@@ -30,8 +30,8 @@ Nothing in E1 depends on a guess. This epic measures the real NMT endpoint and l
 Requirements: FR-120, FR-122, FR-140, FR-141 · measurement task [ER-O1]
 - [ ] Ask the NMT operator whether custom tokens exist in the deployed tokenizer; record the answer
 - [ ] ~20 public pilot-portal page snapshots committed to `tests/fixtures/gov-pages/` (personal data replaced with `synthetic-entities.json` values)
-- [ ] Each masked block sent to WSO2 **once** per candidate format (at least 3, e.g. `⟦N⟧`, `<x1/>`-style, spelled sentinels); raw responses recorded to `tests/fixtures/mt-replay/`, keyed by source hash + model version + format
-- [ ] Report: survival rate per format; block fallback rate by cause (entity lost / altered / duplicated / invented, tag lost / duplicated / reordered, text in non-existent run, glossary term missing, leak scan hit, upstream error) and by block type (heading, paragraph, paragraph-with-link, table cell, form label, list item)
+- [ ] Each masked block sent to WSO2 **once** per candidate format (at least 3, e.g. `⟦N⟧`, `<x1/>`-style, spelled sentinels); raw responses recorded to `tests/fixtures/mt-replay/`, keyed by source hash + model version + format — *first reading done 2026-10-05 on a synthetic 26-block corpus, three formats (wire, xml, brace), 78 recordings; repeat on the pilot snapshots*
+- [ ] Report: survival rate per format; block fallback rate by cause (entity lost / altered / duplicated / invented, tag lost / duplicated / reordered, text in non-existent run, glossary term missing, leak scan hit, upstream error) and by block type (heading, paragraph, paragraph-with-link, table cell, form label, list item) — *first reading: `docs/designs/s0-placeholder-survival.md`. Best variant 65% usable (lenient xml decoder + placeholder-only skip, replayed), below the proposed 80%*
 - [ ] **Gate before S1.5:** masker recall 100% on a held-out set of pages; leak scan 0; block fallback ≤ agreed threshold (proposed 20%). Decision recorded in the repo
 - [ ] S1.4 mock modes and rates are calibrated from these recordings
 *gstack:* `/spec` → run → decision recorded; `/codex` second opinion if GovTech policy allows (see `TODOS.md`)
@@ -158,7 +158,7 @@ Requirements: FR-100, NFR-100, NFR-412 · [ER-3, ER-O4, ER-O5, ER-O7, ER-O9, ER-
 - [x] Keyless public route with enrolled-origin allowlist (403) and per-origin + per-client rate limits (429); JSON accepted as `text/plain` so browsers skip the CORS preflight
 - [x] Tier resolution: strictest of site default, request hint and matched selector; a request cannot lower the tier (S3.1 adds server-side path rules)
 - [x] Nothing is sent to MT or stored until N distinct clients have seen a Tier 2 segment (NFR-304)
-- [ ] Real WSO2 translator client — *waits for WSO2 access; the mock implements the same interface*
+- [x] Real WSO2 translator client — `orchestrator/upstream/wso2.py`, selected with `DZWEB_TRANSLATOR=wso2`. OAuth2 client credentials, token reused until a minute before expiry and renewed once on 401; one text per call, bounded concurrency; every failure an `UpstreamError`, so the page stays English (NFR-410). The API reports no model version, so `DZWEB_MODEL_VERSION` pins it for the cache keys (FR-150). Credentials only in the environment or the git-ignored `.env`; never logged. Probed 2026-10-05: 0.26–0.84 s a call, token lifetime 1 h (`tools/wso2_probe.py`)
 - [ ] PostgreSQL job queue and worker — *S2.4; an in-memory queue implements the interface now*
 - [ ] Rate limits shared across API replicas — *in-process for now; Redis-backed when more than one replica runs*
 

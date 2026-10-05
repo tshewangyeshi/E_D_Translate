@@ -1,0 +1,11 @@
+{
+  "source_wire": "Call ⟦NUM:1⟧ if your application is delayed.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "Call {e1} if your application is delayed.",
+  "raw_output": "ཁྱོད་རའི་ཞུ་ཡིག་འདི་འཕྱིས་སོ་པ་ཅིན་ ཨེན་ཨེ༡ ལུ་བརྒྱུད་འཕྲིན་གཏང་།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "list-item",
+  "recorded": "2026-10-05"
+}

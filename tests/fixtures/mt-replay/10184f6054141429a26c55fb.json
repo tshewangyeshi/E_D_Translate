@@ -1,0 +1,11 @@
+{
+  "source_wire": "Your CID number ⟦CID:1⟧ must match the name on your application.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "Your CID number {e1} must match the name on your application.",
+  "raw_output": "ཁྱོད་ཀྱི་མི་ཁུངས་ངོ་སྤྲོད་ལག་ཁྱེར་ཨང་༼ཨི་༡༽ གིས་ ཁྱོད་རའི་ཞུ་ཡིག་ནང་ཡོད་པའི་མིང་དང་འགྲིག་དགོ།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "paragraph",
+  "recorded": "2026-10-05"
+}

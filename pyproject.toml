@@ -8,6 +8,7 @@ dependencies = [
   "uvicorn>=0.30",
   "psycopg[binary]>=3.2",
   "redis>=5.0",
+  "httpx>=0.27",  # the GovTech translation API client
 ]
 
 [project.optional-dependencies]
@@ -34,6 +35,7 @@ testpaths = ["tests/orchestrator"]
 addopts = "-q"
 markers = [
   "integration: needs PostgreSQL/Redis (docker compose up -d); run by tools/check.py when reachable",
+  "wso2: calls the live GovTech translation API; opt-in with DZWEB_WSO2_LIVE=1, never in make check",
 ]
 filterwarnings = [
   # third-party: starlette TestClient on httpx/anyio; not our code

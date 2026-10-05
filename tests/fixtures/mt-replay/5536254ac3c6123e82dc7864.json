@@ -1,0 +1,11 @@
+{
+  "source_wire": "Read the ⟦1⟧eligibility rules⟦/1⟧ before you apply.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Read the ⟦1⟧eligibility rules⟦/1⟧ before you apply.",
+  "raw_output": "ཞུ་ཡིག་མ་བཙུགས་པའི་ཧེ་མ་ ༡ འོས་འབབ་ཀྱི་ཁྲིམས་ལུགས་ ༡ ལྷག།",
+  "ok": false,
+  "cause": "entity:leak",
+  "block_type": "paragraph-with-link",
+  "recorded": "2026-10-05"
+}

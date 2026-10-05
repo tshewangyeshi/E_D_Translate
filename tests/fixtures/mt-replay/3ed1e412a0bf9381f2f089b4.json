@@ -1,0 +1,11 @@
+{
+  "source_wire": "Download ⟦1⟧⟦T:3⟧⟦/1⟧ and submit it to the ⟦2⟧⟦T:4⟧⟦/2⟧.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "Download {1}{e3}{/1} and submit it to the {2}{e4}{/2}.",
+  "raw_output": "ཌ་ཨོན་ལོཌ་༼༡༽༼ཨི་༣༽ ༼༡༽ དང་ འདི་༼༢༽༼ཨི༤༽ ༼༢༽ ནང་བཙུགས་གནང་།",
+  "ok": false,
+  "cause": "entity:leak",
+  "block_type": "paragraph-with-link",
+  "recorded": "2026-10-05"
+}

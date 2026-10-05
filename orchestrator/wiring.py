@@ -4,9 +4,17 @@ DZWEB_PG_DSN              PostgreSQL DSN (required)
 DZWEB_REDIS_URL           Redis URL (required; must run maxmemory-policy volatile-lru)
 DZWEB_TERMBASE            path to the published termbase JSON (required)
 DZWEB_SITES               path to the enrolled-sites JSON (required)
-DZWEB_TRANSLATOR          "mock" until the WSO2 client exists (S0.1)
+DZWEB_TRANSLATOR          "wso2" (the GovTech API) or "mock"
 DZWEB_ALLOW_MOCK_TRANSLATOR=1   required to run with the mock; it emits "DZ:" + English,
                                 which must never reach citizens
+DZWEB_WSO2_URL            translate endpoint          } required with
+DZWEB_WSO2_TOKEN_URL      OAuth2 token endpoint       } DZWEB_TRANSLATOR=wso2;
+DZWEB_WSO2_CLIENT_ID      client credentials          } the secret only ever in
+DZWEB_WSO2_CLIENT_SECRET                              } the environment or .env
+DZWEB_MODEL_VERSION       the model behind the API, part of every cache key (FR-150).
+                          The API does not report it: change this when GovTech
+                          changes the model. Default "dsai-translationapi-1.0.0"
+DZWEB_WSO2_CONCURRENCY    parallel calls to the API, default 4
 DZWEB_MODEL_FORMAT        "wire" (default) or "xml" (decided by Sprint 0)
 DZWEB_UPSTREAM_RPS        measured WSO2 limit (S0.2), default 5
 DZWEB_WORKER_SHARE        share reserved for the worker (FR-156), default 0.5
@@ -15,6 +23,9 @@ DZWEB_AUDIT_ACTOR         who deployed this configuration (a person or a release
                           changes (FR-620). Defaults to "config:<file name>"
 DZWEB_OPS_TOKEN           bearer token for /v1/health and /v1/metrics; when unset they
                           answer 404 to everyone (FR-610, FR-611)
+
+For local work these can live in a .env file in the working directory
+(git-ignored). A variable set in the real environment always wins over .env.
 
 Connections: one PostgreSQL connection for the stores, reopened if the server
 goes away (store/pg.py), and a second, short-timeout one for health checks and
@@ -59,6 +70,29 @@ from orchestrator.store.postgres_tm import PostgresTM
 from orchestrator.store.reports import PostgresReportStore, ReportStore
 from orchestrator.upstream.quota import QuotaManager
 from orchestrator.upstream.translator import MockTranslator, Translator
+from orchestrator.upstream.wso2 import Wso2Config, Wso2Translator
+
+DEFAULT_MODEL_VERSION = "dsai-translationapi-1.0.0"
+WSO2_SETTINGS = (
+    "DZWEB_WSO2_URL",
+    "DZWEB_WSO2_TOKEN_URL",
+    "DZWEB_WSO2_CLIENT_ID",
+    "DZWEB_WSO2_CLIENT_SECRET",
+)
+
+
+def environment(dotenv: Path | None = None) -> dict[str, str]:
+    """The process environment, filled in from ``.env`` where it says nothing."""
+    env = dict(os.environ)
+    path = dotenv or Path.cwd() / ".env"
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            env.setdefault(key.strip(), value.strip())
+    return env
 
 #: Seconds. Short: they bound how long a dead dependency can hold a thread.
 CONNECT_TIMEOUT = 5
@@ -83,9 +117,12 @@ class Settings:
     worker_share: float
     audit_actor: str = ""
     ops_token: str = ""
+    wso2: Wso2Config | None = None
 
     @staticmethod
-    def from_env(env: Mapping[str, str] = os.environ) -> Settings:
+    def from_env(env: Mapping[str, str] | None = None) -> Settings:
+        """Settings from ``env``, or from the environment and ``.env`` when not given."""
+        env = environment() if env is None else env
         missing = [
             k
             for k in ("DZWEB_PG_DSN", "DZWEB_REDIS_URL", "DZWEB_TERMBASE", "DZWEB_SITES")
@@ -105,6 +142,7 @@ class Settings:
             worker_share=float(env.get("DZWEB_WORKER_SHARE", "0.5")),
             audit_actor=env.get("DZWEB_AUDIT_ACTOR", ""),
             ops_token=env.get("DZWEB_OPS_TOKEN", ""),
+            wso2=_wso2(env),
         )
         if settings.model_format not in MODEL_FORMATS:
             raise ConfigError(f"DZWEB_MODEL_FORMAT must be one of {sorted(MODEL_FORMATS)}")
@@ -119,9 +157,33 @@ def build_translator(settings: Settings, fmt: ModelFormat) -> Translator:
                 "only for local development"
             )
         return MockTranslator(fmt)
+    if settings.translator == "wso2":
+        if settings.wso2 is None:
+            raise ConfigError(
+                f"DZWEB_TRANSLATOR=wso2 needs {', '.join(WSO2_SETTINGS)} in the environment or .env"
+            )
+        return Wso2Translator(settings.wso2)
     raise ConfigError(
-        "no real translator configured: the WSO2 client arrives with Sprint 0 (S0.1); "
+        "DZWEB_TRANSLATOR must be 'wso2' (the GovTech API) or 'mock'; "
         "for local development use DZWEB_TRANSLATOR=mock with DZWEB_ALLOW_MOCK_TRANSLATOR=1"
+    )
+
+
+def _wso2(env: Mapping[str, str]) -> Wso2Config | None:
+    """The API settings, or None when any is missing (reported only if wso2 is chosen)."""
+    if not all(env.get(k) for k in WSO2_SETTINGS):
+        return None
+    try:
+        concurrency = int(env.get("DZWEB_WSO2_CONCURRENCY", "4"))
+    except ValueError as err:
+        raise ConfigError("DZWEB_WSO2_CONCURRENCY must be a whole number") from err
+    return Wso2Config(
+        url=env["DZWEB_WSO2_URL"],
+        token_url=env["DZWEB_WSO2_TOKEN_URL"],
+        client_id=env["DZWEB_WSO2_CLIENT_ID"],
+        client_secret=env["DZWEB_WSO2_CLIENT_SECRET"],
+        model_version=env.get("DZWEB_MODEL_VERSION") or DEFAULT_MODEL_VERSION,
+        concurrency=concurrency,
     )
 
 

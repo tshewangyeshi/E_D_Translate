@@ -1,0 +1,11 @@
+{
+  "source_wire": "Proof of payment of the ⟦T:1⟧",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Proof of payment of the ⟦T:1⟧",
+  "raw_output": "ཊི་ ༡: ཟེར་མི་གི་དངུལ་སྤྲོད་ཀྱི་བདེན་ཁུངས།",
+  "ok": false,
+  "cause": "entity:leak",
+  "block_type": "list-item",
+  "recorded": "2026-10-05"
+}

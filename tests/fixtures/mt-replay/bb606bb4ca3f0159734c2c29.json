@@ -1,0 +1,11 @@
+{
+  "source_wire": "The ⟦T:2⟧ for a new ⟦T:3⟧ is ⟦CUR:1⟧.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "The ⟦T:2⟧ for a new ⟦T:3⟧ is ⟦CUR:1⟧.",
+  "raw_output": "ཊི་ ༢:༣ གི་དོན་ལུ་ ཀུར་ ༡ ཨིན།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "paragraph",
+  "recorded": "2026-10-05"
+}

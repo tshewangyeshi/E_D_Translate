@@ -1,0 +1,11 @@
+{
+  "source_wire": "Passport renewal",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "Passport renewal",
+  "raw_output": "ལམ་ཡིག་བསྐྱར་གསོ།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "heading",
+  "recorded": "2026-10-05"
+}

@@ -30,7 +30,7 @@ from orchestrator.queue.jobs import VALIDATION_FAILURE_PREFIX, ClaimedJob, WorkQ
 from orchestrator.store.keys import SegmentKeys
 from orchestrator.store.lookup import TranslationStore
 from orchestrator.store.models import ReviewRequest
-from orchestrator.testing.mock_nmt import UpstreamError
+from orchestrator.upstream.errors import UpstreamError
 from orchestrator.upstream.quota import QuotaManager
 from orchestrator.upstream.translator import Translator
 

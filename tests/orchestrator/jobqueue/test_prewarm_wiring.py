@@ -89,7 +89,8 @@ def test_fr155_settings_require_the_essentials() -> None:
     ("extra", "message"),
     [
         ({"DZWEB_TRANSLATOR": "mock"}, "ALLOW_MOCK"),
-        ({}, "no real translator"),
+        ({}, "must be 'wso2'"),
+        ({"DZWEB_TRANSLATOR": "wso2"}, "needs DZWEB_WSO2_URL"),
     ],
 )
 def test_fr155_mock_translator_needs_explicit_opt_in(extra: dict[str, str], message: str) -> None:

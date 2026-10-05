@@ -1,0 +1,11 @@
+{
+  "source_wire": "Apply for a passport online and collect it from the nearest office.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "xml",
+  "model_input": "Apply for a passport online and collect it from the nearest office.",
+  "raw_output": "ལམ་ཡིག་གི་དོན་ལུ་ ཡོངས་འབྲེལ་ཐོག་ལས་ཞུ་ཡིག་བཙུགས་ཞིནམ་ལས་ ཉེ་འདབས་ཀྱི་ཡིག་ཚང་ནང་ལས་ལེན་ད།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "paragraph",
+  "recorded": "2026-10-05"
+}

@@ -1,0 +1,11 @@
+{
+  "source_wire": "Date of birth",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "brace",
+  "model_input": "Date of birth",
+  "raw_output": "སྐྱེས་ཚེས་།",
+  "ok": true,
+  "cause": "ok",
+  "block_type": "form-label",
+  "recorded": "2026-10-05"
+}

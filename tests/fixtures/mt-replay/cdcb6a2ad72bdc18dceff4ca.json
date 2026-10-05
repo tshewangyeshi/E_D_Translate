@@ -1,0 +1,11 @@
+{
+  "source_wire": "Pay ⟦CUR:1⟧ by ⟦DATE:2⟧.",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Pay ⟦CUR:1⟧ by ⟦DATE:2⟧.",
+  "raw_output": "ཚེས་གྲངས་ ༢ ལུ་ ཀུར་ ༡:༡ སྤྲོད།",
+  "ok": false,
+  "cause": "entity:missing",
+  "block_type": "paragraph",
+  "recorded": "2026-10-05"
+}

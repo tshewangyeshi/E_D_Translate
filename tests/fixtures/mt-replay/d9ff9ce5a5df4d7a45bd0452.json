@@ -1,0 +1,11 @@
+{
+  "source_wire": "Processing ⟦T:1⟧",
+  "model_version": "dsai-translationapi-1.0.0",
+  "format": "wire",
+  "model_input": "Processing ⟦T:1⟧",
+  "raw_output": "ཊི་ ༡ ལས་རིམ་བསྒྲིག།",
+  "ok": false,
+  "cause": "entity:leak",
+  "block_type": "table-cell",
+  "recorded": "2026-10-05"
+}
