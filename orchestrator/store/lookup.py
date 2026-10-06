@@ -342,8 +342,14 @@ class TranslationStore:
         return result
 
     def expire_machine(self, before: datetime) -> int:
-        """Retention for unapproved machine translations (NFR-305)."""
-        return self.tm.expire_machine(before)
+        """Retention for unapproved machine translations (NFR-305), TM and cache.
+
+        The cached copies go too: they used to outlive retention by up to the
+        cache's 7 days, still being served (found by the S10.4 fault suite).
+        """
+        keys = self.tm.expire_machine(before)
+        self.cache.delete_many([MACHINE_NS + k for k in keys])
+        return len(keys)
 
     def count_machine_before(self, before: datetime) -> int:
         """Size of the next retention run, so an operator can look before leaping."""

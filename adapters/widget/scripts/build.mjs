@@ -13,7 +13,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
-import { readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { cpSync, readdirSync, readFileSync, statSync, writeFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +21,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DIST = join(ROOT, "dist");
 const ENTRY = "main.js";
 const BUDGET_BYTES = 15 * 1024; // FR-201
+const FONT_BUDGET_BYTES = 200 * 1024; // S6.1: fetched once, only when Dzongkha is shown
 
 function run(command, args) {
   execFileSync(command, args, { cwd: ROOT, stdio: "inherit", shell: process.platform === "win32" });
@@ -72,6 +73,15 @@ for (const name of jsFiles()) {
   report.push({ name, raw: bytes.length, gz });
 }
 
+// The Dzongkha font and its licence ship beside the code (S6.1, FR-340).
+// Built by tools/build_dz_font.py; the OFL travels with the font.
+cpSync(join(ROOT, "fonts"), join(DIST, "fonts"), { recursive: true });
+const fontBytes = statSync(join(DIST, "fonts", "dzweb-dzongkha.woff2")).size;
+if (fontBytes > FONT_BUDGET_BYTES) {
+  console.error(`S6.1: font is ${fontBytes} bytes, over the ${FONT_BUDGET_BYTES} budget.`);
+  process.exit(1);
+}
+
 const entryBytes = readFileSync(join(DIST, ENTRY));
 const sri = `sha384-${createHash("sha384").update(entryBytes).digest("base64")}`;
 const contentHash = createHash("sha256").update(entryBytes).digest("hex").slice(0, 16);
@@ -85,6 +95,7 @@ writeFileSync(
       contentHash,
       gzippedTotalBytes: total,
       budgetBytes: BUDGET_BYTES,
+      font: { file: "fonts/dzweb-dzongkha.woff2", bytes: fontBytes, budgetBytes: FONT_BUDGET_BYTES },
       files: report,
     },
     null,

@@ -32,6 +32,19 @@ import {
 } from "./apply.js";
 import { extract, type AttributeUnit, type Extraction, type Segment } from "./extract.js";
 import { stripRenderArtefacts } from "./locale-dz.js";
+import {
+  WRITTEN,
+  clearWritten,
+  markEnglish,
+  markWritten,
+  originalFamily,
+  originalSize,
+} from "./typography.js";
+
+/** True when an ancestor of ``block`` shows Dzongkha the widget wrote. */
+function insideWritten(block: Element): boolean {
+  return block.parentElement?.closest(`[${WRITTEN}]`) != null;
+}
 import { observe, type Observation } from "./observe.js";
 import {
   fetchConfig,
@@ -149,6 +162,8 @@ export class Widget {
   /** Translated attribute values, per element then per attribute (FR-113). */
   private readonly attributes = new WeakMap<Element, Map<string, AttributeState>>();
   private readonly translatedAttributes = new RefList<Element>();
+  /** Blocks left English inside written ones, marked so they keep English type. */
+  private readonly englishBlocks = new RefList<Element>();
   private watching: Observation | null = null;
   private viewportObserver: IntersectionObserver | null = null;
   /**
@@ -157,6 +172,8 @@ export class Widget {
    * the notice cannot miss output that arrives after the first pass (FR-520).
    */
   onMachineOutput: (() => void) | null = null;
+  /** Called before any Dzongkha is written: the place to install typography (S6.1). */
+  beforeWrite: (() => void) | null = null;
 
   constructor(
     private readonly api: ApiOptions,
@@ -209,9 +226,12 @@ export class Widget {
         restoreOriginal(state.segment, state.original);
       }
       clearLanguage(block);
+      clearWritten(block);
       state.translated = false;
     }
     this.translatedBlocks.clear();
+    for (const block of this.englishBlocks.live()) clearWritten(block);
+    this.englishBlocks.clear();
 
     for (const element of this.translatedAttributes.live()) {
       if (!element.isConnected) continue;
@@ -293,11 +313,31 @@ export class Widget {
     const segments = now;
     if (segments.length === 0 && attributes.length === 0) return;
 
-    const sent = new Map<string, { segment: Segment; slots: string[]; generation: number }>();
+    const sent = new Map<
+      string,
+      {
+        segment: Segment;
+        slots: string[];
+        generation: number;
+        base: string | null;
+        family: string | null;
+      }
+    >();
     const items = segments.map((segment, n) => {
       const id = `s${n}`;
       const state = this.stateFor(segment);
-      sent.set(id, { segment, slots: readSlots(segment), generation: state.generation });
+      // Read phase: sizes are measured before anything in this batch is written,
+      // and only when there is typography to size (main.ts installs it).
+      const typed = this.beforeWrite !== null;
+      const base = typed ? originalSize(segment.block) : null;
+      const family = typed ? originalFamily(segment.block) : null;
+      sent.set(id, {
+        segment,
+        slots: readSlots(segment),
+        generation: state.generation,
+        base,
+        family,
+      });
       return {
         id,
         text: segment.text,
@@ -322,7 +362,16 @@ export class Widget {
       const results = await translateBatch(this.api, location.pathname, batch);
       for (const [id, result] of results) {
         if (result.status === "pending_mt") pending.push(id);
-        if (result.status !== "translated") continue; // English stays on the page
+        if (result.status !== "translated") {
+          // English stays on the page -- and keeps English typography, even
+          // inside a block the widget wrote Dzongkha into (S6.1).
+          const kept = sent.get(id);
+          if (kept !== undefined && this.beforeWrite !== null && insideWritten(kept.segment.block)) {
+            markEnglish(kept.segment.block, kept.base, kept.family);
+            this.englishBlocks.add(kept.segment.block);
+          }
+          continue;
+        }
         const attr = sentAttrs.get(id);
         if (attr !== undefined) {
           this.writeAttribute(attr.unit, attr.value, result.text, epoch, result.origin);
@@ -356,7 +405,7 @@ export class Widget {
    * or the host rewrote the text we asked about (node values).
    */
   private write(
-    record: { segment: Segment; slots: string[]; generation: number },
+    record: { segment: Segment; slots: string[]; generation: number; base: string | null },
     epoch: number,
     translated: string,
     origin: string | undefined,
@@ -368,6 +417,7 @@ export class Widget {
     if (state === undefined || state.generation !== generation) return;
     if (!unchangedSinceWrite(segment, slots)) return;
 
+    this.beforeWrite?.();
     if (!applyTranslation(segment, translated)) return; // block stays English
     state.segment = segment;
     state.lastWritten = readSlots(segment).map(stripForCompare);
@@ -375,6 +425,8 @@ export class Widget {
     if (segmentKey !== undefined) state.segmentKey = segmentKey;
     this.translatedBlocks.add(segment.block);
     markLanguage(segment.block, origin);
+    clearWritten(segment.block); // it may have been left English before
+    markWritten(segment.block, record.base);
     if (origin !== "human") this.onMachineOutput?.();
   }
 
@@ -525,6 +577,7 @@ export class Widget {
       for (const block of roots) {
         if (!block.isConnected) continue; // removed while we were debouncing
         clearLanguage(block);
+        clearWritten(block);
         const found = extract(block, options);
         segments.push(...found.segments);
         attributes.push(...found.attributes);

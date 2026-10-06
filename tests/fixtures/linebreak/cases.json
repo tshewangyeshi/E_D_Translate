@@ -1,0 +1,45 @@
+{
+ "_comment": "Line-break assistance (FR-160, ER-8): a zero-width space after every tsheg, at render time only, never twice. orchestrator/locale/dz.py and adapters/widget/src/locale-dz.ts must both turn every 'input' into its 'rendered', and strip 'rendered' back to 'input' (except the idempotent case, whose input already carries the break). Run by pytest and vitest.",
+ "cases": [
+  {
+   "name": "one syllable boundary",
+   "input": "\u0f40\u0f0b\u0f41",
+   "rendered": "\u0f40\u0f0b\u200b\u0f41"
+  },
+  {
+   "name": "a tsheg at the end",
+   "input": "\u0f40\u0f0b\u0f41\u0f0b",
+   "rendered": "\u0f40\u0f0b\u200b\u0f41\u0f0b\u200b"
+  },
+  {
+   "name": "a shad is not a break point",
+   "input": "\u0f40\u0f0b\u0f41\u0f0d \u0f42",
+   "rendered": "\u0f40\u0f0b\u200b\u0f41\u0f0d \u0f42"
+  },
+  {
+   "name": "two tshegs in a row",
+   "input": "\u0f40\u0f0b\u0f0b\u0f41",
+   "rendered": "\u0f40\u0f0b\u200b\u0f0b\u200b\u0f41"
+  },
+  {
+   "name": "English is untouched",
+   "input": "Apply online.",
+   "rendered": "Apply online."
+  },
+  {
+   "name": "mixed runs",
+   "input": "Nu. 500 \u0f40\u0f0b\u0f41",
+   "rendered": "Nu. 500 \u0f40\u0f0b\u200b\u0f41"
+  },
+  {
+   "name": "already rendered: idempotent",
+   "input": "\u0f40\u0f0b\u200b\u0f41",
+   "rendered": "\u0f40\u0f0b\u200b\u0f41"
+  },
+  {
+   "name": "empty",
+   "input": "",
+   "rendered": ""
+  }
+ ]
+}

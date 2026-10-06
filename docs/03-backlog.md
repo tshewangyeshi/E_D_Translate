@@ -328,24 +328,24 @@ Requirements: FR-315
 
 ### S6.1 — Dzongkha type and font
 Requirements: FR-340, FR-341
-- [ ] Self-hosted subsetted WOFF2 with `font-display: swap` and a documented fallback
-- [ ] Type scale exposed as CSS custom properties
-- [ ] Four-character stacked syllables render unclipped at default settings
-- [ ] **Ships an OFL-licensed Tibetan fallback font (e.g. Noto Serif Tibetan, licence confirmed by GovTech) as the default** [ER-O9]
+- [x] Self-hosted subsetted WOFF2 with `font-display: swap` and a documented fallback — *Noto Serif Tibetan, Regular, Tibetan only: 152 KB (`tools/build_dz_font.py`), shipped in `dist/fonts/` with its OFL; fallback stack in `src/typography.ts`*
+- [x] Type scale exposed as CSS custom properties — *`--dzweb-dz-line-height` (2), `--dzweb-dz-scale` (1.3), `--dzweb-dz-font`; a host overrides them on `:root`*
+- [x] Four-character stacked syllables render unclipped at default settings — *ink fits the line box on headings, labels, table headers and buttons in Chromium, Firefox and WebKit (`test/e2e/render.spec.ts`); a host `font: inherit` on buttons clipped them until the scale was made firm*
+- [ ] **Ships an OFL-licensed Tibetan fallback font (e.g. Noto Serif Tibetan, licence confirmed by GovTech) as the default** [ER-O9] — *shipped as the default; GovTech's confirmation of the OFL is still owed*
 - [ ] DDC Uchen replaces the fallback once its web-embedding licence is confirmed (no longer a blocker for the pilot)
-- [ ] Translated blocks size from the block's original font size (`--dz-base`), so nested translated blocks don't compound 1.3 × 1.3; handled-but-untranslated blocks reset to host typography
+- [x] Translated blocks size from the block's original font size (`--dz-base`), so nested translated blocks don't compound 1.3 × 1.3; handled-but-untranslated blocks reset to host typography — *`--dz-base` on the outermost written block only; a block left English inside a written one is marked `data-dz-english` and gets its own size and font family back (`render.spec.ts`, three engines)*
 
 ### S6.2 — Line-breaking
 Requirements: FR-160, NFR-500 · [ER-8]
-- [ ] Long Dzongkha strings wrap within their container rather than overflowing
-- [ ] Break assistance is applied at render only; cache, TM and TTS input contain no inserted characters — verified by asserting on stored values
-- [ ] Widget rule lives in `adapters/widget/locale-dz.ts`, server rule in `locale/dz.py`; a shared JSON fixture proves both insert breaks at the same positions
+- [x] Long Dzongkha strings wrap within their container rather than overflowing — *in all three engines (`render.spec.ts`)*
+- [x] Break assistance is applied at render only; cache, TM and TTS input contain no inserted characters — verified by asserting on stored values — *and the model's own zero-width characters are stripped before storage: they used to reach TM and cache (`test_linebreak.py`)*
+- [x] Widget rule lives in `adapters/widget/locale-dz.ts`, server rule in `locale/dz.py`; a shared JSON fixture proves both insert breaks at the same positions — *`tests/fixtures/linebreak/cases.json`, run by pytest and vitest; both made idempotent*
 
 ### S6.3 — Rendering conformance suite
 Requirements: verifies FR-340, FR-341, FR-160
-- [ ] A conformance page covering stacked syllables, long unbroken strings, mixed English–Dzongkha runs, form labels, table headers and buttons
-- [ ] Run on Chrome, Firefox, Safari and a low-end Android browser before each release
-- [ ] The suite fails loudly if the Uchen font is absent rather than reporting a layout failure
+- [x] A conformance page covering stacked syllables, long unbroken strings, mixed English–Dzongkha runs, form labels, table headers and buttons — *`test/e2e/conformance.html`, on a host marked `lang="dzo"` that pins Times New Roman, like the portal*
+- [ ] Run on Chrome, Firefox, Safari and a low-end Android browser before each release — *Chromium, Firefox and WebKit run in `make check`; a low-end Android device still to do*
+- [x] The suite fails loudly if the Uchen font is absent rather than reporting a layout failure — *for the shipped font (Uchen is not licensed yet): "S6.3: the Dzongkha font ... did not load"*
 *gstack:* `/qa` — but read the font caveat in `CLAUDE.md` first.
 
 ---
@@ -447,22 +447,22 @@ Runs alongside E1; the gates cannot be enforced without it.
 
 ### S10.1 — Frozen evaluation set
 Requirements: NFR-202
-- [ ] 500–1,000 segments across all three tiers, sourced from real government content
-- [ ] Held in a separate repository or a protected path; never used for tuning
-- [ ] chrF++ scored on every model or glossary change
+- [x] 500–1,000 segments across all three tiers, sourced from real government content — *800 from the G2C snapshot (`tools/build_eval_set.py`); tiers proposed (128 / 464 / 208), to be confirmed by a person*
+- [x] Held in a separate repository or a protected path; never used for tuning — *`eval/frozen/`, git-ignored; rules in `eval/README.md`. Move to a private repository with the pilot*
+- [ ] chrF++ scored on every model or glossary change — *scorer `tools/chrf.py` (matches sacrebleu exactly) and `tools/nightly_gate.py` ready; needs human reference translations*
 ### S10.2 — Release gates in CI
 Requirements: NFR-200, NFR-201 · [ER-15]
 The adversarial mock breaks tags at a configured rate, so a *rate* measured against it describes the mock, not dzweb. Gates are split by what each can prove:
-- [ ] **Every build (mock):** across all mock modes and 10,000 seeded runs — zero malformed markup emitted, zero altered or duplicated entities, zero partial restores. Tests named `test_nfr200_*` / `test_nfr201_*`
-- [ ] **Every build (replay):** the recorded real responses from S0.1 pass with tag integrity ≥ 99% and entity preservation 100%
-- [ ] **Nightly (real endpoint):** on the frozen evaluation set (S10.1), tag integrity below 99% or entity preservation below 100% fails; the trend is reported
+- [x] **Every build (mock):** across all mock modes and 10,000 seeded runs — zero malformed markup emitted, zero altered or duplicated entities, zero partial restores. Tests named `test_nfr200_*` / `test_nfr201_*` — *`test_entity_gate.py`, `test_tag_gate.py`*
+- [x] **Every build (replay):** the recorded real responses from S0.1 pass with tag integrity ≥ 99% and entity preservation 100% — *`test_replay_gate.py`: served answers intact, tag integrity 100%, mutation-checked*
+- [ ] **Nightly (real endpoint):** on the frozen evaluation set (S10.1), tag integrity below 99% or entity preservation below 100% fails; the trend is reported — *`tools/nightly_gate.py`: gates, trend file, works against staging (40-segment sample: 33 served, 100% / 100%); scheduling waits for the VM*
 
 ### S10.4 — Fault-injection suite
 Requirements: NFR-410, NFR-412, FR-510, NFR-301 · [ER-17]
-- [ ] `tests/fault/` runs in `make check` against real PostgreSQL and Redis (containers) and a controllable WSO2 mock
-- [ ] Cases: Redis down; PostgreSQL down (tier gate fails closed to source text, still 200); WSO2 slow / 503 / garbage; worker killed mid-job → reclaimed after visibility timeout; invalidated key re-enqueues; stampede → live attempts shed to a bounded queue; quota exhausted → live skipped, worker proceeds; fetcher refuses a redirect to 169.254.169.254 and a DNS answer that changes to 10.x between resolve and connect
-- [ ] Each case asserts HTTP 200, source text where applicable, and an emitted metric
-- [ ] Redis-down case: p95 < 800 ms on a 64-segment cached batch (batched TM read + LRU) [ER-21]
+- [x] `tests/fault/` runs in `make check` against real PostgreSQL and Redis (containers) and a controllable WSO2 mock — *real PostgreSQL and Redis, the production `Wso2Translator` against a scripted gateway*
+- [ ] Cases: Redis down; PostgreSQL down (tier gate fails closed to source text, still 200); WSO2 slow / 503 / garbage; worker killed mid-job → reclaimed after visibility timeout; invalidated key re-enqueues; stampede → live attempts shed to a bounded queue; quota exhausted → live skipped, worker proceeds; fetcher refuses a redirect to 169.254.169.254 and a DNS answer that changes to 10.x between resolve and connect — *all but the fetcher cases, which arrive with the fetcher (S8.0); a stale cached copy outliving retention was found and fixed on the way*
+- [x] Each case asserts HTTP 200, source text where applicable, and an emitted metric — *and a metric: fallback, upstream-error, cache-failure and queue gauges*
+- [x] Redis-down case: p95 < 800 ms on a 64-segment cached batch (batched TM read + LRU) [ER-21] — *was over two minutes (2 s per Redis call, per segment); a circuit breaker and a 0.25 s connect timeout fixed it*
 ### S10.3 — Performance benchmarks
 Requirements: NFR-100, NFR-101, NFR-103, NFR-104
 *gstack:* `/benchmark` before and after each release.

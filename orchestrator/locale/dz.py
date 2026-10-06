@@ -10,6 +10,8 @@ cannot shadow Python's standard-library ``locale`` module.
 
 from __future__ import annotations
 
+import re
+
 TSHEG = "་"  # U+0F0B syllable delimiter (NOT a word boundary)
 SHAD = "།"  # U+0F0D sentence terminator
 DOUBLE_SHAD = "༎"  # U+0F0E
@@ -21,13 +23,20 @@ TIBETAN_DIGITS = "༠༡༢༣༤༥༦༧༨༩"  # U+0F20..U+0F29
 #: shad and double shad plus English terminal punctuation.
 SPLIT_TERMINATORS: frozenset[str] = frozenset({SHAD, DOUBLE_SHAD, ".", "!", "?"})
 
+#: A tsheg not already followed by a break opportunity.
+_UNBROKEN_TSHEG = re.compile(TSHEG + "(?!" + ZWSP + ")")
+
 #: Characters that must never appear in stored text or TTS input (FR-160, FR-330).
 RENDER_ARTEFACTS: frozenset[str] = frozenset({ZWSP, "\u200c", "\ufeff"})
 
 
 def insert_breaks(text: str) -> str:
-    """Render-time only (FR-160): allow line breaks after each tsheg."""
-    return text.replace(TSHEG, TSHEG + ZWSP)
+    """Render-time only (FR-160): allow line breaks after each tsheg, never twice.
+
+    Same rule as adapters/widget/src/locale-dz.ts, held to it by
+    tests/fixtures/linebreak/cases.json (ER-8).
+    """
+    return _UNBROKEN_TSHEG.sub(TSHEG + ZWSP, text)
 
 
 def strip_render_artefacts(text: str) -> str:

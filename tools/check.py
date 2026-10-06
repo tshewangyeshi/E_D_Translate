@@ -47,6 +47,11 @@ STEPS: list[tuple[str, list[str], Path]] = [
         ROOT,
     ),
     (
+        "replay gate, real model output (NFR-200, NFR-201)",
+        [PY, "-m", "pytest", "tests/orchestrator/gates/test_replay_gate.py"],
+        ROOT,
+    ),
+    (
         "masker recall, held-out (FR-140)",
         [
             PY,
@@ -81,9 +86,7 @@ STEPS: list[tuple[str, list[str], Path]] = [
     ),
 ]
 
-NOT_YET: list[tuple[str, str]] = [
-    ("entity gate on real model output (NFR-201)", "needs WSO2 recordings (S0.1) and S10.2"),
-]
+NOT_YET: list[tuple[str, str]] = []
 
 
 INTEGRATION_PORTS = {"PostgreSQL": 55432, "Redis": 56379}  # docker-compose.yml
@@ -93,11 +96,16 @@ INTEGRATION_PORTS = {"PostgreSQL": 55432, "Redis": 56379}  # docker-compose.yml
 BROWSERS = Path.home() / "AppData" / "Local" / "ms-playwright"
 
 
-def browsers_available() -> bool:
-    if BROWSERS.is_dir() and any(BROWSERS.glob("chromium*")):
+def browsers_available(engine: str = "chromium") -> bool:
+    if BROWSERS.is_dir() and any(BROWSERS.glob(f"{engine}*")):
         return True
     cache = Path.home() / ".cache" / "ms-playwright"  # Linux/macOS
-    return cache.is_dir() and any(cache.glob("chromium*"))
+    return cache.is_dir() and any(cache.glob(f"{engine}*"))
+
+
+def other_engines_available() -> bool:
+    """Firefox and WebKit, for the S6.3 rendering conformance suite."""
+    return browsers_available("firefox") and browsers_available("webkit")
 
 
 def services_up() -> dict[str, bool]:
@@ -135,6 +143,13 @@ def main() -> int:
                 ROOT,
             )
         )
+        steps.append(
+            (
+                "fault injection: real PostgreSQL + Redis (S10.4, NFR-411)",
+                [PY, "-m", "pytest", "tests/fault"],
+                ROOT,
+            )
+        )
     try:
         npx = _npx()
         steps += [
@@ -153,6 +168,22 @@ def main() -> int:
                     [npx, "playwright", "test", "--project=fixtures"],
                     WIDGET,
                 ),
+            ]
+            if other_engines_available():
+                steps.append(
+                    (
+                        "rendering conformance: Firefox + WebKit (S6.3)",
+                        [
+                            npx,
+                            "playwright",
+                            "test",
+                            "--project=render-firefox",
+                            "--project=render-webkit",
+                        ],
+                        WIDGET,
+                    )
+                )
+            steps += [
                 # Alone, one worker. Sharing the machine with the other browser
                 # tests measures CPU contention and reports it as widget cost:
                 # the same page measured 85 ms and 145 ms on consecutive runs.
@@ -175,6 +206,11 @@ def main() -> int:
         print(
             "  NOT RUN  browser fixtures (S4.1): Playwright browsers not installed "
             "(cd adapters/widget && npx playwright install chromium)"
+        )
+    if browsers_available() and not other_engines_available():
+        print(
+            "  NOT RUN  rendering conformance in Firefox/WebKit (S6.3): "
+            "(cd adapters/widget && npx playwright install firefox webkit)"
         )
     missing = [n for n, ok in up.items() if not ok]
     if missing:

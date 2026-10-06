@@ -11,6 +11,7 @@ import { LABEL_SWITCH_TO_DZ, LABEL_SWITCH_TO_EN } from "./locale-dz.js";
 import { sendFeedback } from "./api.js";
 import { Notice } from "./notice.js";
 import { Widget, savePreference, savedPreference, whenQuiet } from "./widget.js";
+import { installTypography } from "./typography.js";
 
 /** The script element that loaded this module, for its data- attributes. */
 function ownScript(): HTMLScriptElement | null {
@@ -64,6 +65,9 @@ export async function boot(): Promise<Widget | null> {
   // scroll into view, content the host adds -- and on a cold page that is the
   // only machine output there is (FR-520).
   widget.onMachineOutput = () => notice.show();
+  // Dzongkha typography, installed on the first write, never before (S6.1).
+  const fontUrl = new URL("./fonts/dzweb-dzongkha.woff2", import.meta.url).href;
+  widget.beforeWrite = () => installTypography(document, fontUrl);
 
   // Configuration first: without it the widget cannot tell Tier 1 or private
   // regions apart, so it offers no control at all (FR-216).

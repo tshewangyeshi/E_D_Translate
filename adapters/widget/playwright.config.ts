@@ -34,6 +34,18 @@ export default defineConfig({
       testIgnore: "**/perf.spec.ts",
       use: { ...devices["Desktop Chrome"] },
     },
+    // S6.3: rendering conformance in the other engines a reader may have.
+    // Safari is represented by WebKit; a low-end Android browser needs a device.
+    {
+      name: "render-firefox",
+      testMatch: "**/render.spec.ts",
+      use: { ...devices["Desktop Firefox"] },
+    },
+    {
+      name: "render-webkit",
+      testMatch: "**/render.spec.ts",
+      use: { ...devices["Desktop Safari"] },
+    },
     {
       name: "perf",
       testMatch: "**/perf.spec.ts",

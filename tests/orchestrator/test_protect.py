@@ -253,6 +253,16 @@ def test_fr143_entity_map_is_per_request_and_not_in_masked_text() -> None:
         ("provided by April 2019 because", "April 2019", "DATE"),
         ("Security Deposit nu.50,000 refundable", "nu.50,000", "CUR"),
         ("pay onlinewww.citizenservices.gov.bt OR", "www.citizenservices.gov.bt", "URL"),
+        (
+            "(http://www.portal.example/results/)and also",
+            "http://www.portal.example/results/",
+            "URL",
+        ),
+        (
+            "see https://en.example.org/wiki/Gross_(economics) now",
+            "https://en.example.org/wiki/Gross_(economics)",
+            "URL",
+        ),
     ],
 )
 def test_fr140_pilot_formats_are_one_entity(text: str, value: str, kind: str) -> None:

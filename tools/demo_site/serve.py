@@ -40,7 +40,7 @@ def resolve(path: str) -> Path:
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     base = http.server.SimpleHTTPRequestHandler.extensions_map
-    extensions_map = {**base, ".js": "text/javascript"}  # modules need a JavaScript type
+    extensions_map = {**base, ".js": "text/javascript", ".woff2": "font/woff2"}  # modules, fonts
 
     def translate_path(self, path: str) -> str:
         return str(resolve(path))

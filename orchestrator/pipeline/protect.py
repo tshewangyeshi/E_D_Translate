@@ -160,10 +160,31 @@ def _spans(text: str) -> list[tuple[int, int, str]]:
         for m in pattern.finditer(text):
             if m.start() == m.end():
                 continue
-            if any(m.start() < b and a < m.end() for a, b, _ in taken):
+            end = _url_end(text, m.start(), m.end()) if kind == "URL" else m.end()
+            if any(m.start() < b and a < end for a, b, _ in taken):
                 continue
-            taken.append((m.start(), m.end(), kind))
+            taken.append((m.start(), end, kind))
     return sorted(taken)
+
+
+def _url_end(text: str, start: int, end: int) -> int:
+    """A URL stops at a closing bracket it did not open, and keeps one it did.
+
+    The pilot portal writes "(http://.../bcsearesult/)and also": without this
+    the URL ran on through ")and" and swallowed a word. A bracket the URL
+    opened itself, as in ".../wiki/Gross_(economics)", stays part of it.
+    """
+    depth = 0
+    for n in range(start, end):
+        if text[n] == "(":
+            depth += 1
+        elif text[n] == ")":
+            if depth == 0:
+                return n
+            depth -= 1
+    if depth > 0 and text[end : end + 1] == ")":
+        return end + 1
+    return end
 
 
 def find_entities(text: str) -> list[tuple[int, int, str]]:

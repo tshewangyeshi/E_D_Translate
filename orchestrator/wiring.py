@@ -113,6 +113,9 @@ def environment(dotenv: Path | None = None) -> dict[str, str]:
 CONNECT_TIMEOUT = 5
 OPS_STATEMENT_TIMEOUT_MS = 2000
 REDIS_TIMEOUT = 2.0
+#: Redis is on the same host or network: a connection takes milliseconds when
+#: it is up, so waiting long for one only delays the page when it is down.
+REDIS_CONNECT_TIMEOUT = 0.25
 
 
 class ConfigError(RuntimeError):
@@ -292,7 +295,9 @@ def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
     )
     audit = PostgresAuditLog(conn)
     client = redis.Redis.from_url(
-        settings.redis_url, socket_timeout=REDIS_TIMEOUT, socket_connect_timeout=REDIS_TIMEOUT
+        settings.redis_url,
+        socket_timeout=REDIS_TIMEOUT,
+        socket_connect_timeout=REDIS_CONNECT_TIMEOUT,
     )
     if isinstance(translator, Wso2Translator):
         # One access token for the API, the worker and every tool, kept until it
