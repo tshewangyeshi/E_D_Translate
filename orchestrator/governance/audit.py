@@ -7,7 +7,7 @@ Who changed what the service will say, and when:
     termbase loaded  ─┐
     tier-rule change ─┼─► recorded by the API process at start, from its files
     enrolment change ─┘
-    seed import      ─► Action.SEED_IMPORT; its call site arrives with S7.0
+    seed import      ─► TranslationStore.approve(action=SEED_IMPORT) (orchestrator/ops/seed.py)
 
 Four rules shape this file.
 

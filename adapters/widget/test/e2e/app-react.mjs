@@ -24,6 +24,7 @@ export function tree(h, content, counter = 0, intro = content.intro, extra = [])
     h("p", { key: "l", className: "legal" }, content.legal),
     h("p", { key: "c", id: "counter" }, `Counter: ${counter}`),
     // Blocks the host adds after load, the S4.2 case.
-    ...extra.map((text, n) => h("p", { key: `x${n}`, className: "added" }, text)),
+    // Keyed by content, so new content is a new element, as on a real route change.
+    ...extra.map((text, n) => h("p", { key: `x${n}:${text}`, className: "added" }, text)),
   ]);
 }

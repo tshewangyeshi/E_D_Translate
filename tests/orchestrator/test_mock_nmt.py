@@ -72,3 +72,43 @@ def test_fr141_mock_is_deterministic_under_a_seed() -> None:
 def test_fr142_tibetan_digit_mode_emits_tibetan_digits() -> None:
     out = MockNMT(MODEL_FORMATS["wire"], seed=7).translate(SEGMENT, Mode.TIBETAN_DIGITS)
     assert re.search("[༠-༩]", out)
+
+
+# --- calibration against GovTech staging (S0.1 recordings) ---
+
+
+def _recorded_mix(fmt: str) -> dict[object, float]:
+    import json
+    from collections import Counter
+    from pathlib import Path
+
+    from orchestrator.testing.mock_nmt import CAUSE_MODES
+
+    replay = Path(__file__).resolve().parents[1] / "fixtures" / "mt-replay"
+    causes = Counter(
+        rec["cause"]
+        for rec in (json.loads(f.read_text(encoding="utf-8")) for f in replay.glob("*.json"))
+        if rec["format"] == fmt
+    )
+    mix: Counter[object] = Counter()
+    for cause, n in causes.items():
+        mix[CAUSE_MODES[cause]] += n  # an unmapped new cause fails here, loudly
+    return {mode: float(n) for mode, n in mix.items()}
+
+
+def test_s14_the_calibrated_mix_is_what_staging_recorded() -> None:
+    from orchestrator.testing.mock_nmt import CALIBRATED_MODES
+
+    assert _recorded_mix("xml") == CALIBRATED_MODES
+
+
+def test_s14_the_calibrated_mock_draws_modes_at_the_recorded_rates() -> None:
+    from collections import Counter
+
+    from orchestrator.testing.mock_nmt import CALIBRATED_MODES
+
+    mock = MockNMT(MODEL_FORMATS["xml"], seed=7, modes=CALIBRATED_MODES)
+    drawn = Counter(mock.pick_mode() for _ in range(20_000))
+    total = sum(CALIBRATED_MODES.values())
+    for mode, weight in CALIBRATED_MODES.items():
+        assert abs(drawn[mode] / 20_000 - weight / total) < 0.02, mode

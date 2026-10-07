@@ -1,0 +1,25 @@
+{
+  "_comment": "Sites enrolled on the GovTech VM (FR-601). The G2C portal is the pilot. Tier 1 rules are PROVISIONAL until the product owner confirms which portal pages and elements carry fees, eligibility and legal text (FR-510); nothing here is reachable by citizens until GovTech's gateway publishes the API.",
+  "sites": [
+    {
+      "site_id": "g2c",
+      "origins": [
+        "https://g2c.tech.gov.bt",
+        "https://www.citizenservices.gov.bt"
+      ],
+      "default_tier": 2,
+      "tier1_selectors": [
+        ".legal-notice",
+        "[data-dz-tier='1']"
+      ],
+      "private_selectors": [
+        "[data-dz-private]",
+        "input",
+        "textarea"
+      ],
+      "path_rules": [
+        { "path": "/g2cportal/disclaimer*", "tier": 1 }
+      ]
+    }
+  ]
+}

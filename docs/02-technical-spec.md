@@ -342,6 +342,8 @@ Everything here is render-time and nothing here is persisted.
 - Emit a CSS custom property block for the Dzongkha type scale rather than hard-coded values, so agencies can adjust: `--dzweb-dz-line-height: 2.0; --dzweb-dz-scale: 1.3;`
 - Font: self-hosted subsetted WOFF2, `font-display: swap`, with a documented fallback stack. **Until the DDC Uchen web-embedding licence is confirmed, ship an OFL-licensed Tibetan font (e.g. Noto Serif Tibetan; licence confirmed by GovTech) as the default**, so Dzongkha never renders as missing-glyph boxes [ER-O9].
 
+**As built (S6.1, 2026-10-06):** the widget installs one `<style data-dz-style>` on its first write (`adapters/widget/src/typography.ts`). Every rule targets `[data-dz-written]`, which the widget sets on blocks it wrote and removes on toggle-back, never `[lang^="dz"]`: Bhutanese hosts mark their own pages Dzongkha (the G2C portal is `lang="dzo"`). Font family, line height and the outermost block's size are `!important`, because hosts pin Latin fonts and Latin line heights that clip stacked syllables; hosts adjust them through the custom properties instead. The font is Noto Serif Tibetan Regular, subset to Tibetan (152 KB), declared with a Tibetan `unicode-range`, so it is fetched only when Dzongkha is shown.
+
 ### 2.8 speak.py — speech (FR-300, 320..321, 330)
 
 **Post-pilot [ER-4].** Audio (E5) is built after the translation pilot. The FR-330 storage guards (no placeholder, mask token or zero-width character in cache, TM or anything TTS would read) are enforced **now**, in E1 and E6, so speech can be added later without rework.

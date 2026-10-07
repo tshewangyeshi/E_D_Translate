@@ -66,7 +66,7 @@ function translateReply(body) {
   };
 }
 
-const TYPES = { ".js": "text/javascript", ".mjs": "text/javascript", ".html": "text/html" };
+const TYPES = { ".js": "text/javascript", ".mjs": "text/javascript", ".html": "text/html", ".woff2": "font/woff2" };
 
 async function serveFile(res, path) {
   try {
@@ -136,6 +136,10 @@ export async function start(port = 0) {
       return serveBundle(res, name);
     }
 
+    if (path === "/conformance") {
+      // S6.3: the Dzongkha rendering conformance page, with the shipped typography.
+      return serveFile(res, join(HERE, "conformance.html"));
+    }
     if (path === "/perf") {
       // A long, framework-free page: 3,000 nodes and a counter ticking every
       // 250 ms, so the main thread is never idle. No framework, so whatever the

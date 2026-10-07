@@ -327,13 +327,13 @@ class PostgresTM:
         ).fetchone()
         return int(row[0]) if row else 0
 
-    def expire_machine(self, before: datetime) -> int:
+    def expire_machine(self, before: datetime) -> list[str]:
         with self.conn.transaction():
-            cur = self.conn.execute(
+            rows = self.conn.execute(
                 "UPDATE translation_version SET invalidated_at = now()"
-                " WHERE origin = 'mt' AND invalidated_at IS NULL AND created_at < %s",
+                " WHERE origin = 'mt' AND invalidated_at IS NULL AND created_at < %s"
+                " RETURNING lookup_key",
                 (before,),
-            )
-            expired = int(cur.rowcount)
+            ).fetchall()
             self.conn.execute(_CLOSE_INVALIDATED)
-        return expired
+        return [r[0] for r in rows]

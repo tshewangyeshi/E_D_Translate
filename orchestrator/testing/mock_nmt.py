@@ -2,7 +2,7 @@
 
 A model that misbehaves on purpose, so restoration and validation are tested
 against realistic failure rather than a cooperative stub. Deterministic under
-a seed. Mode mix and rates are to be calibrated from Sprint 0 recordings (S0.1).
+a seed. ``CALIBRATED_MODES`` is the mix measured on GovTech staging (S0.1).
 
 It corrupts the ENCODED model text marker by marker, using the same
 ModelFormat the pipeline uses, so every candidate token format is exercised:
@@ -59,6 +59,32 @@ CORRUPTING_MODES: tuple[Mode, ...] = (
     Mode.INVENT_NUMBER,
     Mode.EMPTY,
 )
+
+
+#: How each failure recorded against GovTech staging (tests/fixtures/mt-replay,
+#: ``cause``) is reproduced by the mock.
+CAUSE_MODES: dict[str, Mode] = {
+    "ok": Mode.WELL_BEHAVED,
+    "entity:missing": Mode.DROP,
+    "term:missing": Mode.DROP,
+    "tag:unbalanced": Mode.DROP,  # a closing tag lost
+    "entity:leak": Mode.TIBETAN_DIGITS,  # the value written out instead of its placeholder
+    "tag:malformed_marker": Mode.TRUNCATE,
+    "tag:tag_mismatch": Mode.REORDER,
+    "upstream:UpstreamBadResponse": Mode.UNAVAILABLE,
+}
+
+#: The adopted xml format's raw behaviour on staging, 26 blocks sent whole
+#: (2026-10-05): 7 ok, 12 tag syntax broken (9 malformed, 3 unbalanced), 3
+#: placeholders lost, 2 values written out, 2 bad responses. Weights are counts.
+#: tests/orchestrator/test_mock_nmt.py recomputes this from the recordings.
+CALIBRATED_MODES: dict[Mode, float] = {
+    Mode.WELL_BEHAVED: 7.0,
+    Mode.TRUNCATE: 9.0,
+    Mode.DROP: 6.0,
+    Mode.TIBETAN_DIGITS: 2.0,
+    Mode.UNAVAILABLE: 2.0,
+}
 
 
 # The mock raises the same errors as the real client (orchestrator/upstream/errors.py).

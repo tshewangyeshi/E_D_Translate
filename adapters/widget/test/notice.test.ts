@@ -67,8 +67,10 @@ describe("the notice itself (FR-520, FR-521)", () => {
     const root = document.querySelector("[data-dz-notice]") as HTMLElement;
     expect(root.querySelector("[lang='dz']")).not.toBe(null);
     expect(root.querySelector("[lang='en']")).not.toBe(null);
-    expect(root.getAttribute("role")).toBe("status");
-    expect(root.getAttribute("aria-live")).toBe("polite"); // never interrupt mid-sentence
+    const live = root.querySelector("[role='status']") as HTMLElement;
+    expect(live.getAttribute("aria-live")).toBe("polite"); // never interrupt mid-sentence
+    expect(live.textContent).toBe(NOTICE_DZ + NOTICE_EN); // the message, not the buttons
+    expect(root.hasAttribute("role")).toBe(false); // an <aside> may not be a status (S4.4)
   });
 
   it("fr520_only_one_notice_exists_however_often_it_is_shown", () => {

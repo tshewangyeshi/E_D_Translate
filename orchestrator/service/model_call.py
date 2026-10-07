@@ -39,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import re
 
+from orchestrator.locale.dz import strip_render_artefacts
 from orchestrator.pipeline.segment import (
     Entity,
     ModelFormat,
@@ -59,6 +60,10 @@ _LABEL_END = re.compile(r"[:：\-–—]\s*$")
 _SEPARATOR = re.compile(r"[^\w]*")
 #: Values in brackets at the end: "... the G2C system (".
 _OPEN_BRACKET = re.compile(r"\s*\(\s*$")
+#: Punctuation and space at the start of the words after leading values.
+_LEADING_PUNCT = re.compile(r"[^\w]+")
+#: "2.", "2)", "1.5 ", "(3) " before a word: a list number, not a value.
+_LIST_NUMBER = re.compile(r"\(?\d{1,2}(?:\.\d{1,2})*[.)]?\s*(?=[A-Za-z])")
 #: A sentence end: punctuation, closing quotes or brackets, space, then a capital
 #: or a list number;
 #: or, for "(2009).The" as the pilot portal writes it, a full stop with no space
@@ -100,7 +105,15 @@ async def translate_segment(translator: Translator, fmt: ModelFormat, segment: S
 
 
 async def _one(translator: Translator, fmt: ModelFormat, segment: Segment) -> Segment:
-    return fmt.decode(await translator.translate(fmt.encode(segment), segment), segment)
+    decoded = fmt.decode(await translator.translate(fmt.encode(segment), segment), segment)
+    # The model's own zero-width characters are rendering, not text: nothing
+    # stored or spoken may carry one (FR-160, FR-330). The page adds its own.
+    return Segment(
+        tuple(
+            Text(strip_render_artefacts(t.value)) if isinstance(t, Text) else t
+            for t in decoded.tokens
+        )
+    )
 
 
 async def _piece(translator: Translator, fmt: ModelFormat, piece: Piece) -> Segment:
@@ -108,18 +121,19 @@ async def _piece(translator: Translator, fmt: ModelFormat, piece: Piece) -> Segm
     if not has_words(piece):
         return piece  # punctuation, a lone entity: nothing to translate
     lead, core, trail = _trim(piece)
+    leading, core = _leading_values(core)
     core, values = _label_values(core)
     sentences = split_sentences(core)
     translated = await asyncio.gather(*(_one(translator, fmt, s) for s, _ in sentences))
     body: list[Token] = []
     for (_, gap), sentence in zip(sentences, translated, strict=True):
         body.extend((*sentence.tokens, Text(gap)))
-    return Segment(tuple(_merge_text([*lead, *body, *values, *trail])))
+    return Segment(tuple(_merge_text([*lead, *leading, *body, *values, *trail])))
 
 
 def _sentences(piece: Segment) -> list[tuple[Segment, str]]:
     """The sentences ``_piece`` sends for this piece."""
-    return split_sentences(_label_values(_trim(piece)[1])[0])
+    return split_sentences(_label_values(_leading_values(_trim(piece)[1])[1])[0])
 
 
 def split_sentences(core: Segment) -> list[tuple[Segment, str]]:
@@ -166,6 +180,38 @@ def _has_words(tokens: list[Token]) -> bool:
     return has_words(Segment(tuple(_merge_text(tokens))))
 
 
+def _leading_values(core: Segment) -> tuple[tuple[Token, ...], Segment]:
+    """Split off what opens a piece and is not for the model to translate.
+
+    Two things, both found by the nightly gate on the pilot portal (2026-10-06),
+    where the model mangled them and the block stayed English:
+      * identifiers (addresses, phone numbers, IDs) with only punctuation
+        around them, "(<e1/>)and also",
+        "- <e1/> : Index Number", "<e1/> (ICT Division)";
+      * a short list number glued to the text, "2.To establish", "1.5 Service
+        Name" -- one or two digits a part, so a year is never taken for one.
+    What is split off goes back in front of the translation unchanged.
+    """
+    tokens = list(core.tokens)
+    cut = 0
+    while cut < len(tokens) and _is_identifier_or_separator(tokens[cut]):
+        cut += 1
+    if cut < len(tokens) and any(isinstance(t, Entity) for t in tokens[:cut]):
+        first = tokens[cut]
+        if isinstance(first, Text) and (punct := _LEADING_PUNCT.match(first.value)):
+            rest = first.value[punct.end() :]
+            if rest:
+                return (*tokens[:cut], Text(punct.group(0))), Segment(
+                    (Text(rest), *tokens[cut + 1 :])
+                )
+        return tuple(tokens[:cut]), Segment(tuple(tokens[cut:]))
+    opening = tokens[0] if tokens else None
+    if isinstance(opening, Text) and (marker := _LIST_NUMBER.match(opening.value)):
+        rest = opening.value[marker.end() :]
+        return (Text(marker.group(0)),), Segment((Text(rest), *tokens[1:]))
+    return (), core
+
+
 def _label_values(core: Segment) -> tuple[Segment, tuple[Token, ...]]:
     """Split "Label: <values>" into the label and the values that follow it."""
     tokens = list(core.tokens)
@@ -189,6 +235,17 @@ def _label_values(core: Segment) -> tuple[Segment, tuple[Token, ...]]:
     label = before.value[: gap.start()] if gap else before.value
     space = (Text(gap.group(0)),) if gap else ()
     return Segment((*tokens[: cut - 1], Text(label))), (*space, *values)
+
+
+#: Values that are not part of a sentence's grammar. Amounts, dates and
+#: numbers are: "2026 is the year" must reach the model whole.
+_IDENTIFIERS = frozenset({"URL", "EMAIL", "PHONE", "CID", "REF"})
+
+
+def _is_identifier_or_separator(token: Token) -> bool:
+    if isinstance(token, Entity):
+        return token.kind in _IDENTIFIERS
+    return isinstance(token, Text) and _SEPARATOR.fullmatch(token.value) is not None
 
 
 def _is_value_or_separator(token: Token) -> bool:

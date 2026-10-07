@@ -1,7 +1,8 @@
 """Per-key token-bucket rate limiting for the keyless public routes (FR-103).
 
-In-process only: each API replica limits independently. A shared Redis limiter
-can replace this behind the same interface when more than one replica runs.
+``RateLimiter`` is in-process: each API replica limits on its own.
+``SharedRateLimiter`` keeps the buckets in Redis, so the limit holds across
+replicas; the API uses it whenever Redis is configured.
 
 Two properties matter beyond the arithmetic, both found by the 2026-09-28 audit:
 
@@ -25,10 +26,15 @@ TODOS.md, which decides what the client key means before any of this applies.
 from __future__ import annotations
 
 import ipaddress
+import logging
+import math
 import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
+
+log = logging.getLogger(__name__)
 
 IPV6_BUCKET_PREFIX = 64
 
@@ -68,6 +74,72 @@ class RateLimiter:
         self._state[key] = (tokens - 1.0, now) if tokens >= 1.0 else (tokens, now)
         self._state.move_to_end(key)
         return tokens >= 1.0
+
+    def retry_after_seconds(self) -> int:
+        return max(1, int(60.0 / self.per_minute))
+
+
+#: One token bucket, updated atomically in Redis on Redis's own clock, so every
+#: replica sees the same bucket and no two can spend the same token.
+_BUCKET = """
+local now = redis.call('TIME')
+now = tonumber(now[1]) + tonumber(now[2]) / 1000000
+local rate, burst, ttl = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3])
+local state = redis.call('HMGET', KEYS[1], 't', 'u')
+local tokens = tonumber(state[1]) or burst
+local updated = tonumber(state[2]) or now
+tokens = math.min(burst, tokens + math.max(0, now - updated) * rate)
+local allowed = 0
+if tokens >= 1 then
+  tokens = tokens - 1
+  allowed = 1
+end
+redis.call('HSET', KEYS[1], 't', tostring(tokens), 'u', tostring(now))
+redis.call('EXPIRE', KEYS[1], ttl)
+return allowed
+"""
+
+
+class SharedRateLimiter:
+    """``RateLimiter`` across every API replica, in Redis (S2.1).
+
+    In-process buckets let a client spend the full limit once per replica.
+    Here each bucket lives in Redis, under a salted hash of its key, never
+    the key itself: a client address used for limiting is never written
+    down (NFR-303). A bucket expires once it would be full again.
+
+    If Redis fails, the call falls back to this process's own limiter, so
+    limiting degrades to per-replica rather than disappearing.
+    """
+
+    def __init__(
+        self,
+        client: Any,
+        name: str,
+        *,
+        per_minute: float,
+        burst: float,
+        key_hash: Callable[[str], str],
+    ) -> None:
+        self.name = name
+        self.per_minute = per_minute
+        self.burst = burst
+        self._key_hash = key_hash
+        self._script = client.register_script(_BUCKET)
+        self._rate = per_minute / 60.0
+        self._ttl = max(1, math.ceil(burst / self._rate) + 1)
+        self.fallback = RateLimiter(per_minute=per_minute, burst=burst)
+        self.failures = 0
+
+    def allow(self, key: str) -> bool:
+        redis_key = f"dzweb:ratelimit:{self.name}:{self._key_hash(key)}"
+        try:
+            return bool(self._script(keys=[redis_key], args=[self._rate, self.burst, self._ttl]))
+        except Exception as err:  # noqa: BLE001 - limiting must outlive a Redis fault
+            self.failures += 1
+            if self.failures == 1 or self.failures % 1000 == 0:
+                log.warning("shared rate limiter %s: %s", self.name, type(err).__name__)
+            return self.fallback.allow(key)
 
     def retry_after_seconds(self) -> int:
         return max(1, int(60.0 / self.per_minute))

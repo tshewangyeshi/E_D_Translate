@@ -41,6 +41,7 @@ Requirements: NFR-100, NFR-412, FR-156 · [ER-O7]
 - [ ] Measured and documented: requests per second, maximum batch size, maximum input length, p95 latency, behaviour at the limit (429 vs queueing)
 - [ ] Capacity note in the spec: pilot pages × segments per page vs quota, including the offline pre-warm time
 - [ ] Token-bucket sizes for the quota manager (§2.10) derived from these numbers
+- [x] One GovTech access token shared by the API, the worker and the tools, kept in Redis until a minute before it expires and across restarts; refused tokens are replaced for everyone (`orchestrator/upstream/token_store.py`) — *asked by GovTech 2026-10-05; live: three processes, one token request*
 
 ### S0.3 — Numbered requirements in the repo
 Requirements: all · [ER-O8]
@@ -78,7 +79,7 @@ Requirements: FR-120, FR-121, FR-124 · [ER-2, ER-10]
 - [x] Parses wire markers `⟦N⟧…⟦/N⟧`, `⟦vN/⟧`; rejects unescaped delimiters, unbalanced or unknown markers with a stable cause (mapping to `tag_fallback` lands with the API, S2.1); **client input may not contain entity tokens**
 - [x] Round-trip without translation (identity model) reproduces the segment byte-for-byte (Hypothesis property test)
 - [x] Segments over the model limit split at shad or terminal punctuation, never inside a placeholder
-- [ ] Converts wire markers ↔ the model token format chosen in S0.1 — *two candidates implemented (`wire`, `xml`); final choice waits for S0.1*
+- [x] Converts wire markers ↔ the model token format chosen in S0.1 — *two candidates implemented (`wire`, `xml`); final choice waits for S0.1* — *xml adopted by S0.1 (2026-10-05): `DEFAULT_MODEL_FORMAT`, decoded leniently*
 - [x] Passes the shared extraction fixtures
 *gstack:* `/spec` → implement → `/review`
 
@@ -94,7 +95,7 @@ Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
 - [x] All masks restore exactly from **the current request's** entity map; output entities are byte-identical to input
 - [x] Hypothesis property tests: entity-rich sentences mask and restore byte-identical; any digit run in any script is masked
 - [x] Recall tool (`tools/masker_recall.py`, in `make check`): 100% on a synthetic labelled set with held-out split
-- [ ] Masker recall on **hand-labelled pilot snapshots** with a held-out set — *waits for Sprint 0 snapshots (S0.1)*
+- [x] Masker recall on **hand-labelled pilot snapshots** with a held-out set — *waits for Sprint 0 snapshots (S0.1)* — *`labelled-pilot.json` (71 real sentences, 130 entities) and `labelled-pilot-fresh.json` (23, 33), in `make check`. Unbiased first readings: 78% held-out, then 94% on a fresh set; gaps fixed (landlines, 00975, times, month-year, lowercase nu., glued www.)*
 - [x] **FR-144 (proposed):** amounts, dates, percentages and counts translated by the model, values checked in any script (`DZWEB_NUMBERS`, default `model`); phone numbers a masked kind of their own (`PHONE`); bare `www.` addresses masked as `URL` (`tests/orchestrator/test_numbers.py`) — *awaits SRS sign-off*
 - [x] Values after a label ("Email ID: …") or in brackets at the end of a piece are not sent to the model; only the words are (`orchestrator/service/model_call.py`)
 - [x] Each piece is sent sentence by sentence (abbreviations, initials and list numbers do not split); 262 of 264 pilot segments translate (99.2%)
@@ -105,18 +106,18 @@ Requirements: FR-140, FR-141 · Gate: NFR-201 · [ER-9, ER-10, ER-12]
 **As** a developer, **I need** a model mock that misbehaves on purpose, **so that** restoration and validation are tested against realistic failure rather than a cooperative stub.
 Requirements: supports FR-122, FR-123, FR-141
 - [x] Mock modes: well-behaved, drops placeholders, duplicates placeholders, reorders placeholders, **invents placeholders, truncates tokens, converts digits to Tibetan, invents numbers**, mangles mask tokens, returns empty, times out, returns 503 (`orchestrator/testing/mock_nmt.py`)
-- [ ] Mode mix and rates calibrated from S0.1 recordings — *waits for WSO2 access*
+- [x] Mode mix and rates calibrated from S0.1 recordings — *waits for WSO2 access* — *`CALIBRATED_MODES` from the xml recordings; a test recomputes it from `tests/fixtures/mt-replay`*
 - [x] Deterministic under a seed
 - [x] Used by default in unit tests; real endpoint only in integration tests
 *Build this before S1.5.*
 
 ### S1.5 — Restoration and tag validation
 Requirements: FR-122, FR-123 · Gate: NFR-200 · [ER-2, ER-10]
-- [ ] Placeholder multiset **and order** in output are compared to input by the same shared validator as entities; mismatch records a tag-integrity failure
-- [ ] **Widget responses:** on mismatch the segment returns `tag_fallback` with source text, and the widget keeps the block English (no DOM restructuring, FR-210)
-- [ ] **Proxy/CMS/html responses:** formatting collapse produces valid markup with the segment's formatting applied to the whole
-- [ ] Malformed markup is never emitted, under any mock mode
-- [ ] Tag integrity rate is computed and exposed per batch
+- [x] Placeholder multiset **and order** in output are compared to input by the same shared validator as entities; mismatch records a tag-integrity failure — *`check_tags` on the shared `validate`; `tests/orchestrator/gates/test_tag_gate.py`*
+- [x] **Widget responses:** on mismatch the segment returns `tag_fallback` with source text, and the widget keeps the block English (no DOM restructuring, FR-210) — *and the widget refuses mismatched markers even when marked translated (`widget.test.ts`)*
+- [x] **Proxy/CMS/html responses:** formatting collapse produces valid markup with the segment's formatting applied to the whole — *`collapse_formatting` (tags.py); `translate(markup=True)` serves it, never stores it; the `/v1/translate/html` route itself is S8.0c*
+- [x] Malformed markup is never emitted, under any mock mode — *NFR-200 gate: 10,000 seeded runs, every mode, both formats; mutation-checked*
+- [x] Tag integrity rate is computed and exposed per batch — *`tag_integrity=` on each request's log line, and `dzweb_tag_integrity_ratio`*
 *Blocked by the S0.1 gate.* *gstack:* `/spec` → implement → `/review` → `/codex` (if policy allows)
 
 ### S1.6 — Glossary substitution
@@ -162,8 +163,8 @@ Requirements: FR-100, NFR-100, NFR-412 · [ER-3, ER-O4, ER-O5, ER-O7, ER-O9, ER-
 - [x] Tier resolution: strictest of site default, request hint and matched selector; a request cannot lower the tier (S3.1 adds server-side path rules)
 - [x] Nothing is sent to MT or stored until N distinct clients have seen a Tier 2 segment (NFR-304)
 - [x] Real WSO2 translator client — `orchestrator/upstream/wso2.py`, selected with `DZWEB_TRANSLATOR=wso2`. OAuth2 client credentials, token reused until a minute before expiry and renewed once on 401; one text per call, bounded concurrency; every failure an `UpstreamError`, so the page stays English (NFR-410). The API reports no model version, so `DZWEB_MODEL_VERSION` pins it for the cache keys (FR-150). Credentials only in the environment or the git-ignored `.env`; never logged. Probed 2026-10-05: 0.26–0.84 s a call, token lifetime 1 h (`tools/wso2_probe.py`)
-- [ ] PostgreSQL job queue and worker — *S2.4; an in-memory queue implements the interface now*
-- [ ] Rate limits shared across API replicas — *in-process for now; Redis-backed when more than one replica runs*
+- [x] PostgreSQL job queue and worker — *S2.4; an in-memory queue implements the interface now* — *`PostgresJobQueue` and `run_worker`, wired in `build()` (S2.4)*
+- [x] Rate limits shared across API replicas — *in-process for now; Redis-backed when more than one replica runs* — *`SharedRateLimiter`: Redis buckets under salted hashes, per-replica fallback (`test_replicas.py`)*
 
 ### S2.3 — Health, metrics, gateway publication
 Requirements: FR-600, FR-610, FR-611 · [ER-O4]
@@ -187,7 +188,7 @@ Requirements: NFR-412, FR-155, FR-156, NFR-413 · [ER-3, ER-O7, ER-21]
 - [x] Pre-warm: `npm run build && node scripts/export-segments.mjs` runs the real widget extractor over snapshots; `python -m orchestrator.ops.prewarm` queues Tier 2 segments at pre-warm priority, skips duplicates and already-translated keys, and lists Tier 1 segments for the S7.0 human review. *Needs the pilot snapshots (S0.1).*
 - [x] Runnable services with production wiring (`orchestrator/wiring.py`): `uvicorn orchestrator.main:create --factory`, `python -m orchestrator.queue.run_worker`; the mock translator requires an explicit opt-in so fake output can never be deployed by accident
 - [~] Rate-capped re-warm after glossary and model invalidations: **re-warm happens through normal misses**, capped by the live quota and the bounded queue. A proactive re-warm job cannot be rebuilt from the TM, because stored sources already carry the old term placeholders; re-running pre-warm on the snapshots is the explicit route.
-- [ ] Connection pool for PostgreSQL — *wiring uses one connection per process: correct, but requests are serialised on it; must be pooled before the pilot (TODOS.md)*
+- [x] Connection pool for PostgreSQL — *wiring uses one connection per process: correct, but requests are serialised on it; must be pooled before the pilot (TODOS.md)* — *`PooledConnection` over psycopg_pool (`DZWEB_PG_POOL_SIZE`), store work off the event loop (`test_pool.py`, `test_offloop.py`)*
 
 ---
 
@@ -227,7 +228,7 @@ Requirements: NFR-304, NFR-305, NFR-303 · [ER-O3]
 - [ ] Pilot enrols public, unauthenticated pages only — **enrolment policy, not code.** `data-dz-private` is the technical backstop if a signed-in page is enrolled by mistake; it does not replace the enrolment decision
 - [x] Widget loads nothing on pages marked `data-dz-private` (checked on `<html>` and `<body>`; it does not even request configuration); `data-dz-skip` and configured `private_selectors` regions, and all their descendants and attributes, are never extracted
 - [x] Server normalises numeric and ID-like path segments to `:id` before storage or logging — `redact_path`, kept separate from the tier-matching normaliser because rules must match the real path. Deliberately eager: `/legal/2026-budget` redacts too, which costs a vaguer log line and never a leaked identifier
-- [ ] Tier 2 segments are neither persisted nor sent to MT until seen from ≥N distinct clients (proposed 3; salted, daily-rotated client hash); test: a one-off string never reaches the WSO2 mock — **holds for one API process; open for several.** Tests (`tests/orchestrator/test_distinct_clients.py`) show a one-off string reaches neither the model, the queue, the TM nor the cache. *Fixed 2026-09-29, twice:* a request that crossed midnight was hashed with one day's salt and counted in the next day's set, so the hash now carries its day; and before that, the counter kept one set per segment and refreshed its expiry on every sighting, so a citizen returning on three mornings was counted as three clients; counts are now scoped to the UTC day the salt lives for. ***Still open:*** *each process draws its own salt, so one citizen served by three replicas, or across three restarts in a day, is counted as three. Recorded as a strict `xfail` test and in TODOS.md; the fix needs a decision on where a shared salt may live*
+- [x] Tier 2 segments are neither persisted nor sent to MT until seen from ≥N distinct clients (proposed 3; salted, daily-rotated client hash); test: a one-off string never reaches the WSO2 mock — **holds for one API process; open for several.** Tests (`tests/orchestrator/test_distinct_clients.py`) show a one-off string reaches neither the model, the queue, the TM nor the cache. *Fixed 2026-09-29, twice:* a request that crossed midnight was hashed with one day's salt and counted in the next day's set, so the hash now carries its day; and before that, the counter kept one set per segment and refreshed its expiry on every sighting, so a citizen returning on three mornings was counted as three clients; counts are now scoped to the UTC day the salt lives for. ***Still open:*** *each process draws its own salt, so one citizen served by three replicas, or across three restarts in a day, is counted as three. Recorded as a strict `xfail` test and in TODOS.md; the fix needs a decision on where a shared salt may live* — *now across processes too: every replica derives the day's salt from `DZWEB_CLIENT_HASH_KEY` (`test_replicas.py`)*
 - [x] Unapproved machine translations expire after the retention period — `python -m orchestrator.ops.retention --days 90`, with `--dry-run` to see the blast radius first. Invalidates rather than deletes, because `translation_version` is immutable by trigger so what was served stays explicable. Residual: a row can still be served from the Redis cache until its own 7-day TTL runs out
 - [x] Logs contain keys, counts and the redacted path, never segment text or client address. One request log line, asserted by behaviour rather than by inspection: a test feeds person-shaped text through the live and the failing path and greps every emitted record. Mutation-checked — adding one logging call that includes segment text fails both
 *gstack:* `/cso` is a gate on this story.
@@ -272,16 +273,16 @@ Requirements: FR-113, FR-211 · [ER-11, ER-18, ER-20]
 
 ### S4.3 — Toggle and persistence
 Requirements: FR-212, FR-213 · [ER-11, ER-19]
-- [ ] Toggle restores original text exactly, including whitespace
-- [ ] **Regression:** host changes a fee from Nu. 500 to Nu. 600 while Dzongkha is on; toggle back shows Nu. 600
-- [ ] Choice persists across pages on the same origin
-- [ ] Repeated toggling does not accumulate state or leak memory: state lives in `WeakMap`s; vitest mounts/unmounts 1,000 blocks × 50 cycles and in-flight state returns to zero; Playwright heap snapshot shows no detached `Text` retained after 50 SPA route changes
+- [x] Toggle restores original text exactly, including whitespace — *byte for byte, same nodes, across paragraphs, links and lists (`test/toggle.test.ts`)*
+- [x] **Regression:** host changes a fee from Nu. 500 to Nu. 600 while Dzongkha is on; toggle back shows Nu. 600 — *in jsdom, with and without re-translation, and in real React and Vue (`test/e2e/toggle.spec.ts`)*
+- [x] Choice persists across pages on the same origin — *React page to Vue page and back, both directions (`test/e2e/toggle.spec.ts`)*
+- [x] Repeated toggling does not accumulate state or leak memory: state lives in `WeakMap`s; vitest mounts/unmounts 1,000 blocks × 50 cycles and in-flight state returns to zero; Playwright heap snapshot shows no detached `Text` retained after 50 SPA route changes — *1,000 blocks x 50 cycles leave no state; the held lists dedupe and drop collected entries (they used to grow for the whole session); 50 route changes in React and Vue leave 0 detached Text, where a leaking build leaves 980*
 
 ### S4.4 — Host-page safety
 Requirements: FR-210, NFR-300, NFR-401 · [ER-18]
 - [x] Translated text is inserted as text (`nodeValue` / `setAttribute`), never parsed as HTML. Structural, not filtered: no sanitiser is involved and none should be, because a sanitiser can be bypassed and `nodeValue` is not parsed
 - [x] A fixture page with a script-bearing translation response is not executed — six payloads (`<script>`, `<img onerror>`, `<svg onload>`, quote-break-out, `javascript:` iframe, tag-break-out) plus a hostile `alt` value. Each asserts the payload did not run, created no element, and is present as literal text. Mutation-checked: switching the writer to `innerHTML` fails all eight
-- [ ] axe-core via Playwright on the four fixture hosts: **zero new violations** vs. the widget-absent baseline
+- [x] axe-core via Playwright on the four fixture hosts: **zero new violations** vs. the widget-absent baseline — *`test/e2e/a11y.spec.ts`, English and Dzongkha. Found and fixed: the notice's `<aside>` carried role=status (aria-allowed-role); the live region is now the message alone*
 *gstack:* `/cso` on this story specifically.
 
 ---
@@ -327,24 +328,24 @@ Requirements: FR-315
 
 ### S6.1 — Dzongkha type and font
 Requirements: FR-340, FR-341
-- [ ] Self-hosted subsetted WOFF2 with `font-display: swap` and a documented fallback
-- [ ] Type scale exposed as CSS custom properties
-- [ ] Four-character stacked syllables render unclipped at default settings
-- [ ] **Ships an OFL-licensed Tibetan fallback font (e.g. Noto Serif Tibetan, licence confirmed by GovTech) as the default** [ER-O9]
+- [x] Self-hosted subsetted WOFF2 with `font-display: swap` and a documented fallback — *Noto Serif Tibetan, Regular, Tibetan only: 152 KB (`tools/build_dz_font.py`), shipped in `dist/fonts/` with its OFL; fallback stack in `src/typography.ts`*
+- [x] Type scale exposed as CSS custom properties — *`--dzweb-dz-line-height` (2), `--dzweb-dz-scale` (1.3), `--dzweb-dz-font`; a host overrides them on `:root`*
+- [x] Four-character stacked syllables render unclipped at default settings — *ink fits the line box on headings, labels, table headers and buttons in Chromium, Firefox and WebKit (`test/e2e/render.spec.ts`); a host `font: inherit` on buttons clipped them until the scale was made firm*
+- [ ] **Ships an OFL-licensed Tibetan fallback font (e.g. Noto Serif Tibetan, licence confirmed by GovTech) as the default** [ER-O9] — *shipped as the default; GovTech's confirmation of the OFL is still owed*
 - [ ] DDC Uchen replaces the fallback once its web-embedding licence is confirmed (no longer a blocker for the pilot)
-- [ ] Translated blocks size from the block's original font size (`--dz-base`), so nested translated blocks don't compound 1.3 × 1.3; handled-but-untranslated blocks reset to host typography
+- [x] Translated blocks size from the block's original font size (`--dz-base`), so nested translated blocks don't compound 1.3 × 1.3; handled-but-untranslated blocks reset to host typography — *`--dz-base` on the outermost written block only; a block left English inside a written one is marked `data-dz-english` and gets its own size and font family back (`render.spec.ts`, three engines)*
 
 ### S6.2 — Line-breaking
 Requirements: FR-160, NFR-500 · [ER-8]
-- [ ] Long Dzongkha strings wrap within their container rather than overflowing
-- [ ] Break assistance is applied at render only; cache, TM and TTS input contain no inserted characters — verified by asserting on stored values
-- [ ] Widget rule lives in `adapters/widget/locale-dz.ts`, server rule in `locale/dz.py`; a shared JSON fixture proves both insert breaks at the same positions
+- [x] Long Dzongkha strings wrap within their container rather than overflowing — *in all three engines (`render.spec.ts`)*
+- [x] Break assistance is applied at render only; cache, TM and TTS input contain no inserted characters — verified by asserting on stored values — *and the model's own zero-width characters are stripped before storage: they used to reach TM and cache (`test_linebreak.py`)*
+- [x] Widget rule lives in `adapters/widget/locale-dz.ts`, server rule in `locale/dz.py`; a shared JSON fixture proves both insert breaks at the same positions — *`tests/fixtures/linebreak/cases.json`, run by pytest and vitest; both made idempotent*
 
 ### S6.3 — Rendering conformance suite
 Requirements: verifies FR-340, FR-341, FR-160
-- [ ] A conformance page covering stacked syllables, long unbroken strings, mixed English–Dzongkha runs, form labels, table headers and buttons
-- [ ] Run on Chrome, Firefox, Safari and a low-end Android browser before each release
-- [ ] The suite fails loudly if the Uchen font is absent rather than reporting a layout failure
+- [x] A conformance page covering stacked syllables, long unbroken strings, mixed English–Dzongkha runs, form labels, table headers and buttons — *`test/e2e/conformance.html`, on a host marked `lang="dzo"` that pins Times New Roman, like the portal*
+- [ ] Run on Chrome, Firefox, Safari and a low-end Android browser before each release — *Chromium, Firefox and WebKit run in `make check`; a low-end Android device still to do*
+- [x] The suite fails loudly if the Uchen font is absent rather than reporting a layout failure — *for the shipped font (Uchen is not licensed yet): "S6.3: the Dzongkha font ... did not load"*
 *gstack:* `/qa` — but read the font caveat in `CLAUDE.md` first.
 
 ---
@@ -357,10 +358,10 @@ S7.0 is **pre-pilot**; the rest of E7 is post-pilot.
 **As** a citizen on the pilot portal, **I need** the fee and eligibility text in Dzongkha, **so that** the pilot proves the value on the pages that matter most, even before the reviewer UI exists.
 Requirements: FR-410, FR-411, FR-413, FR-510, FR-620 · [ER-O2]
 - [ ] Named DCDD reviewers and a review timeline are agreed (dependency for sprint 4)
-- [ ] `ops/seed.py export` extracts every Tier 1 segment from the pilot snapshots to XLIFF/spreadsheet, with entity and tag placeholders **locked** (visible, not editable)
+- [x] `ops/seed.py export` extracts every Tier 1 segment from the pilot snapshots to XLIFF/spreadsheet, with entity and tag placeholders **locked** (visible, not editable) — *XLIFF 1.2: `<g>`/`<x/>` codes CAT tools lock, each showing its value or glossary term; de-duplicated across pages, each unit listing its pages; already-approved text left out*
 - [ ] Reviewers translate and approve offline
-- [ ] `ops/seed.py import` validates each row's placeholder multiset and order and rejects invalid rows with a reason; valid rows become `translation_version` (`origin = human`) + `review_item = approved`, each with an audit event
-- [ ] Before launch, a report lists Tier 1 coverage per pilot page (approved / still English)
+- [x] `ops/seed.py import` validates each row's placeholder multiset and order and rejects invalid rows with a reason; valid rows become `translation_version` (`origin = human`) + `review_item = approved`, each with an audit event — *also refuses rows whose English changed since export, invented numbers or addresses, no Dzongkha, a DTD; `--dry-run`; the audit event is `seed.import` with a batch id (`tests/orchestrator/test_seed.py`, mutation-checked; run end to end on PostgreSQL)*
+- [x] Before launch, a report lists Tier 1 coverage per pilot page (approved / still English) — *`python -m orchestrator.ops.seed coverage --site portal segments.json`*
 
 ### S7.1 — Reviewer interface
 Requirements: FR-420, FR-421
@@ -446,22 +447,22 @@ Runs alongside E1; the gates cannot be enforced without it.
 
 ### S10.1 — Frozen evaluation set
 Requirements: NFR-202
-- [ ] 500–1,000 segments across all three tiers, sourced from real government content
-- [ ] Held in a separate repository or a protected path; never used for tuning
-- [ ] chrF++ scored on every model or glossary change
+- [x] 500–1,000 segments across all three tiers, sourced from real government content — *800 from the G2C snapshot (`tools/build_eval_set.py`); tiers proposed (128 / 464 / 208), to be confirmed by a person*
+- [x] Held in a separate repository or a protected path; never used for tuning — *`eval/frozen/`, git-ignored; rules in `eval/README.md`. Move to a private repository with the pilot*
+- [ ] chrF++ scored on every model or glossary change — *scorer `tools/chrf.py` (matches sacrebleu exactly) and `tools/nightly_gate.py` ready; needs human reference translations*
 ### S10.2 — Release gates in CI
 Requirements: NFR-200, NFR-201 · [ER-15]
 The adversarial mock breaks tags at a configured rate, so a *rate* measured against it describes the mock, not dzweb. Gates are split by what each can prove:
-- [ ] **Every build (mock):** across all mock modes and 10,000 seeded runs — zero malformed markup emitted, zero altered or duplicated entities, zero partial restores. Tests named `test_nfr200_*` / `test_nfr201_*`
-- [ ] **Every build (replay):** the recorded real responses from S0.1 pass with tag integrity ≥ 99% and entity preservation 100%
-- [ ] **Nightly (real endpoint):** on the frozen evaluation set (S10.1), tag integrity below 99% or entity preservation below 100% fails; the trend is reported
+- [x] **Every build (mock):** across all mock modes and 10,000 seeded runs — zero malformed markup emitted, zero altered or duplicated entities, zero partial restores. Tests named `test_nfr200_*` / `test_nfr201_*` — *`test_entity_gate.py`, `test_tag_gate.py`*
+- [x] **Every build (replay):** the recorded real responses from S0.1 pass with tag integrity ≥ 99% and entity preservation 100% — *`test_replay_gate.py`: served answers intact, tag integrity 100%, mutation-checked*
+- [ ] **Nightly (real endpoint):** on the frozen evaluation set (S10.1), tag integrity below 99% or entity preservation below 100% fails; the trend is reported — *`tools/nightly_gate.py`: gates, trend file, works against staging (40-segment sample: 33 served, 100% / 100%); scheduling waits for the VM*
 
 ### S10.4 — Fault-injection suite
 Requirements: NFR-410, NFR-412, FR-510, NFR-301 · [ER-17]
-- [ ] `tests/fault/` runs in `make check` against real PostgreSQL and Redis (containers) and a controllable WSO2 mock
-- [ ] Cases: Redis down; PostgreSQL down (tier gate fails closed to source text, still 200); WSO2 slow / 503 / garbage; worker killed mid-job → reclaimed after visibility timeout; invalidated key re-enqueues; stampede → live attempts shed to a bounded queue; quota exhausted → live skipped, worker proceeds; fetcher refuses a redirect to 169.254.169.254 and a DNS answer that changes to 10.x between resolve and connect
-- [ ] Each case asserts HTTP 200, source text where applicable, and an emitted metric
-- [ ] Redis-down case: p95 < 800 ms on a 64-segment cached batch (batched TM read + LRU) [ER-21]
+- [x] `tests/fault/` runs in `make check` against real PostgreSQL and Redis (containers) and a controllable WSO2 mock — *real PostgreSQL and Redis, the production `Wso2Translator` against a scripted gateway*
+- [ ] Cases: Redis down; PostgreSQL down (tier gate fails closed to source text, still 200); WSO2 slow / 503 / garbage; worker killed mid-job → reclaimed after visibility timeout; invalidated key re-enqueues; stampede → live attempts shed to a bounded queue; quota exhausted → live skipped, worker proceeds; fetcher refuses a redirect to 169.254.169.254 and a DNS answer that changes to 10.x between resolve and connect — *all but the fetcher cases, which arrive with the fetcher (S8.0); a stale cached copy outliving retention was found and fixed on the way*
+- [x] Each case asserts HTTP 200, source text where applicable, and an emitted metric — *and a metric: fallback, upstream-error, cache-failure and queue gauges*
+- [x] Redis-down case: p95 < 800 ms on a 64-segment cached batch (batched TM read + LRU) [ER-21] — *was over two minutes (2 s per Redis call, per segment); a circuit breaker and a 0.25 s connect timeout fixed it*
 ### S10.3 — Performance benchmarks
 Requirements: NFR-100, NFR-101, NFR-103, NFR-104
 *gstack:* `/benchmark` before and after each release.

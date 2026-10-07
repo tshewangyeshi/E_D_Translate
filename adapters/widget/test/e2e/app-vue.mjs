@@ -22,7 +22,8 @@ export function options(h, content) {
         h("img", { id: "photo", src: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", alt: this.alt }),
         h("p", { class: "legal" }, this.legal),
         h("p", { id: "counter" }, `Counter: ${this.counter}`),
-        ...this.extra.map((text) => h("p", { class: "added" }, text)),
+        // Keyed by content, so new content is a new element, as on a real route change.
+        ...this.extra.map((text, n) => h("p", { key: `x${n}:${text}`, class: "added" }, text)),
       ]);
     },
   };

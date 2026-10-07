@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="dzo">
+<head>
+  <meta charset="utf-8">
+  <title>Dzongkha rendering conformance</title>
+  <style>
+    /* A host page that, like the G2C portal, is itself marked Dzongkha and pins a font. */
+    body { font: 16px/1.5 "Times New Roman", serif; margin: 20px; }
+    .narrow { width: 120px; border: 1px solid #999; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #999; padding: 4px; }
+    button { font: inherit; }
+  </style>
+</head>
+<body>
+  <!-- S6.3 conformance page (FR-340, FR-341, FR-160). Text written by the widget
+       carries data-dz-written and its original size in --dz-base, as the widget
+       sets them; the page installs the shipped typography exactly as main.ts does. -->
+  <p id="host">འབྲུག་གི་ཡིག་ཆ། Host Dzongkha, not written by the widget.</p>
+
+  <h2 id="heading" data-dz-written style="--dz-base: 24px">ལམ་ཡིག་བསྐྱར་གསོ།</h2>
+  <p id="stacks" data-dz-written style="--dz-base: 16px">བསྒྲུབས་ སྒྲིག་ རྒྱལ་ཁབ་ སྐྱེས་ ཀྵྭཱ་ ཧྲཱུཾ་ བསྒྲིགས།</p>
+  <div id="narrow" class="narrow" data-dz-written style="--dz-base: 16px"></div>
+  <p id="mixed" data-dz-written style="--dz-base: 16px">འཐུས་ Nu. 500 དང་ applications@portal.gov.example ལུ་འབྲི།</p>
+  <form><label id="label" for="cid" data-dz-written style="--dz-base: 16px">ངོ་སྤྲོད་ལག་ཁྱེར་ཨང་།</label> <input id="cid"></form>
+  <table><tr><th id="th" data-dz-written style="--dz-base: 16px">ཞབས་ཏོག་གི་མིང་།</th><th>Fee</th></tr></table>
+  <p><button id="button" data-dz-written style="--dz-base: 16px">ཞུ་ཡིག་ཕུལ།</button></p>
+  <div data-dz-written style="--dz-base: 16px">ཞབས་ཏོག <p id="english" data-dz-english style="--dz-base: 16px; --dz-family: 'Times New Roman', serif">Fees are non-refundable.</p></div>
+  <div id="outer" data-dz-written style="--dz-base: 16px">ཕྱི་ཁ། <span id="inner" data-dz-written style="--dz-base: 16px">ནང་ཁ།</span></div>
+
+  <script type="module">
+    import { installTypography } from "/widget/typography.js";
+    import { insertBreaks } from "/widget/locale-dz.js";
+    // A long run of syllables with no space, broken only where the widget breaks it.
+    document.getElementById("narrow").textContent = insertBreaks("བཀྲ་ཤིས་བདེ་ལེགས་".repeat(12));
+    installTypography(document, new URL("/widget/fonts/dzweb-dzongkha.woff2", location.href).href);
+    window.__ready = true;
+  </script>
+</body>
+</html>

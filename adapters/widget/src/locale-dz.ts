@@ -25,8 +25,12 @@ const RENDER_ARTEFACTS = [ZWSP, "\u200C", "\uFEFF"];
  * goes after each one.
  */
 export function insertBreaks(text: string): string {
-  return text.split(TSHEG).join(TSHEG + ZWSP);
+  // Never twice: a string already rendered keeps one break per tsheg. Same rule
+  // as orchestrator/locale/dz.py, held to it by tests/fixtures/linebreak (ER-8).
+  return text.replace(UNBROKEN_TSHEG, TSHEG + ZWSP);
 }
+
+const UNBROKEN_TSHEG = new RegExp(`${TSHEG}(?!${ZWSP})`, "g");
 
 /** Remove everything `insertBreaks` added, recovering the stored text. */
 export function stripRenderArtefacts(text: string): string {

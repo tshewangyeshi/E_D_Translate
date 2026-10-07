@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from orchestrator.pipeline.protect import EntityCheckError, mask, restore
+from orchestrator.pipeline.protect import TRANSLATABLE_KINDS, EntityCheckError, mask, restore
 from orchestrator.pipeline.segment import (
     DEFAULT_MODEL_FORMAT,
     MODEL_FORMATS,
@@ -361,3 +361,45 @@ def test_fr210_sentences_inside_a_link_piece_keep_the_tags_around_them() -> None
     out = run(translate_segment(model, XML, seg))
     assert out.to_wire() == "⟦1⟧DZ[Read this.] DZ[Then apply.]⟦/1⟧ DZ[Thank you.]"
     assert calls_needed(seg) == 3
+
+
+# --- what opens a piece (found by the nightly gate, 2026-10-06) ---
+
+
+@pytest.mark.parametrize(
+    ("text", "sent"),
+    [
+        ("(https://www.portal.gov.example/results/)and also through SMS", "and also through SMS"),
+        (
+            "- https://exams.example.bt : Index Number and date of birth",
+            "Index Number and date of birth",
+        ),
+        ("+975-02-325170 (ICT Division, NLCS)", "ICT Division, NLCS)"),
+        ("2.To establish the committee", "To establish the committee"),
+        ("1.5 Service Name: Up gradation of scale", "Service Name: Up gradation of scale"),
+    ],
+)
+def test_fr140_what_opens_a_piece_is_kept_out_of_the_model(text: str, sent: str) -> None:
+    # Numbers left to the model, as by default (FR-144): a list number is text.
+    seg, _ = mask(parse(text), TRANSLATABLE_KINDS)
+    model = Recorder()
+    out = run(translate_segment(model, XML, seg))
+    assert model.sent == [sent]
+    assert out.to_wire().startswith(seg.to_wire()[: seg.to_wire().index(sent)])
+    assert [t for t in out.tokens if isinstance(t, Entity)] == [
+        t for t in seg.tokens if isinstance(t, Entity)
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "2026 is the year the service opens",  # a year, not a list number
+        "Write to help@portal.gov.example for help",  # a value inside the sentence
+    ],
+)
+def test_fr140_content_at_the_start_is_still_sent(text: str) -> None:
+    seg = _masked_wire(text)
+    model = Recorder(lambda t: f"DZ {t}")
+    run(translate_segment(model, XML, seg))
+    assert "<e1/>" in model.sent[0]  # the year or the address went with its sentence

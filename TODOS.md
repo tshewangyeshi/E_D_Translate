@@ -36,6 +36,44 @@
 **Priority:** P1
 **Depends on:** DCDD termbase
 
+### Reference translations for the evaluation set
+
+**What:** Human Dzongkha translations for the 800 segments in `eval/frozen/segments.jsonl` (DCDD or GovTech translators), and confirmation of each segment's proposed tier.
+
+**Why:** chrF++ (NFR-202) needs references; the scorer and the nightly run are ready and report "missing" until then.
+
+**Effort:** L (translator time)
+**Priority:** P1
+**Depends on:** translators
+
+### What the nightly gate found on real portal text
+
+**Done 2026-10-06:** identifiers opening a piece and short list numbers are kept out of the model; URLs stop at a bracket they did not open. The same 40 segments: 33 served before, 39 after.
+
+**What:** A value at the start of a sentence ("(http://...)and also", "+975-02-325170 (ICT Division)") and list numbers glued to text ("2.To establish", "1.5 Service Name") fall back to English. Move leading values and list markers out of the model's way, as trailing values already are.
+
+**Why:** 7 of 40 sampled portal segments were refused for these reasons (2026-10-06). Safe, but English.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Schedule the nightly gate; run on a low-end Android browser
+
+**What:** Run `tools/nightly_gate.py` nightly on the GovTech VM; run `test/e2e/render.spec.ts` on a low-end Android device before each release.
+
+**Effort:** S each
+**Priority:** P2
+**Depends on:** the VM; a device
+
+### GovTech confirmation of the shipped font's licence
+
+**What:** Confirm the SIL Open Font License (Noto Serif Tibetan, `adapters/widget/fonts/OFL.txt`) fits GovTech policy; swap in DDC Uchen when its web-embedding licence is confirmed.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** GovTech, DDC
+
 ### Dzongkha font on the pilot portal
 
 **What:** Ask GovTech to give `[lang|="dz"]` text a Dzongkha font on g2c.tech.gov.bt.
@@ -135,6 +173,8 @@
 **Depends on:** None
 
 ### PostgreSQL connection pool
+
+**Done 2026-10-05:** `PooledConnection` over psycopg_pool, store work off the event loop; NFR-100 still to be re-measured against real PostgreSQL.
 
 **What:** Replace the single connection per process in `orchestrator/wiring.py` with a `psycopg_pool` pool, and run store calls off the event loop (or switch to psycopg's async API).
 

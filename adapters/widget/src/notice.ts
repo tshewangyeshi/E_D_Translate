@@ -96,15 +96,20 @@ export class Notice {
     const root = el("aside");
     root.setAttribute("data-dz-notice", "");
     root.setAttribute("translate", "no"); // widget UI, not page content
-    // Announced, but politely: it must not interrupt a screen reader mid-sentence.
-    root.setAttribute("role", "status");
-    root.setAttribute("aria-live", "polite");
 
     const dz = el("span", NOTICE_DZ);
     dz.setAttribute("lang", "dz");
     const en = el("span", NOTICE_EN);
     en.setAttribute("lang", "en");
-    root.append(dz, en);
+    // Announced, but politely: it must not interrupt a screen reader mid-sentence.
+    // The live region is the message alone, not the <aside>: `status` is not a
+    // role an <aside> may take (axe aria-allowed-role, S4.4), and the buttons
+    // are not news.
+    const message = el("div");
+    message.setAttribute("role", "status");
+    message.setAttribute("aria-live", "polite");
+    message.append(dz, en);
+    root.append(message);
 
     const report = el("button", `${REPORT_DZ} / ${REPORT_EN}`) as HTMLButtonElement;
     report.type = "button";

@@ -62,6 +62,107 @@ class ReconnectingConnection:
         self._conn.close()
 
 
+class Rows:
+    """A statement's results, read in full before its connection went back to the pool.
+
+    The stores use only ``fetchone``, ``fetchall`` and ``rowcount``.
+    """
+
+    def __init__(self, cursor: Any) -> None:
+        self.rowcount: int = cursor.rowcount
+        self._rows = list(cursor.fetchall()) if cursor.description is not None else []
+        self._next = 0
+
+    def fetchone(self) -> Any:
+        if self._next >= len(self._rows):
+            return None
+        self._next += 1
+        return self._rows[self._next - 1]
+
+    def fetchall(self) -> list[Any]:
+        rest, self._next = self._rows[self._next :], len(self._rows)
+        return rest
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self.fetchall())
+
+
+class PooledConnection:
+    """The ``ReconnectingConnection`` interface over a pool (S2.4, TODOS: connection pool).
+
+    One connection per process serialised every request. Here each statement
+    borrows a connection for its own length, so requests that run at the same
+    time (store calls run off the event loop, in threads) no longer queue on
+    one socket. A transaction keeps its connection for its whole length: every
+    statement inside it, in the same thread, goes to that connection.
+
+    A connection that went away is checked and replaced by the pool before it
+    is handed out, so a database restart still costs one failed call at most
+    (NFR-410), as with ``ReconnectingConnection``.
+    """
+
+    def __init__(self, pool: Any) -> None:
+        self._pool = pool
+        self._held = threading.local()
+
+    def _in_transaction(self) -> Any:
+        return getattr(self._held, "conn", None)
+
+    def execute(self, query: Any, params: Any = None) -> Any:
+        held = self._in_transaction()
+        if held is not None:
+            return held.execute(query, params)
+        with self._pool.connection() as conn:
+            return Rows(conn.execute(query, params))
+
+    @contextmanager
+    def transaction(self) -> Iterator[Any]:
+        with self.session() as conn, conn.transaction() as tx:
+            yield tx  # nested: a savepoint on the same connection
+
+    @contextmanager
+    def session(self) -> Iterator[Any]:
+        """One connection for every statement in this thread until the block ends.
+
+        For work that relies on session state: a session advisory lock taken
+        on one pooled connection and released on another would never be
+        released, and the next caller would wait for it forever.
+        """
+        held = self._in_transaction()
+        if held is not None:
+            yield held
+            return
+        with self._pool.connection() as conn:
+            self._held.conn = conn
+            try:
+                yield conn
+            finally:
+                self._held.conn = None
+
+    @property
+    def closed(self) -> bool:
+        return bool(self._pool.closed)
+
+    @property
+    def info(self) -> Any:
+        with self._pool.connection() as conn:
+            return conn.info
+
+    def close(self) -> None:
+        self._pool.close()
+
+
+@contextmanager
+def pinned(conn: Any) -> Iterator[None]:
+    """Keep every statement in the block on one connection, pooled or not."""
+    session = getattr(conn, "session", None)
+    if session is None:
+        yield  # a single connection is pinned already
+        return
+    with session():
+        yield
+
+
 @contextmanager
 def advisory_lock(conn: Any, name: str) -> Iterator[None]:
     """Hold a PostgreSQL advisory lock for the length of one transaction.

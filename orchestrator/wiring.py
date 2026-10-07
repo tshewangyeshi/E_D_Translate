@@ -25,6 +25,11 @@ DZWEB_NUMBERS             "model" (default): amounts, dates, percentages and cou
                           translated by the model and every value is checked (FR-144);
                           "protected": every number masked and restored unchanged (FR-140).
                           IDs, phone numbers, references, emails and URLs are always protected
+DZWEB_CLIENT_HASH_KEY     secret from which each day's client-hash salt is derived; the
+                          same value on every API replica makes "seen by N distinct
+                          clients" (S3.4) and rate limits (S2.1) hold across replicas.
+                          Unset: each process draws its own salt (fine for one process)
+DZWEB_PG_POOL_SIZE        most PostgreSQL connections one process opens (default 10)
 DZWEB_DISTINCT_CLIENTS    how many different clients must see Tier 2 text before it is
                           sent to the model or stored (NFR-304). Default 3; 1 only for
                           a local demo with one browser
@@ -45,7 +50,7 @@ from __future__ import annotations
 import hashlib
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -73,10 +78,11 @@ from orchestrator.store.cache import (
 )
 from orchestrator.store.lookup import StoreSettings, TranslationStore
 from orchestrator.store.migrate import LOCK_NAME, migrate, pending
-from orchestrator.store.pg import ReconnectingConnection, advisory_lock
+from orchestrator.store.pg import PooledConnection, ReconnectingConnection, advisory_lock
 from orchestrator.store.postgres_tm import PostgresTM
 from orchestrator.store.reports import PostgresReportStore, ReportStore
 from orchestrator.upstream.quota import QuotaManager
+from orchestrator.upstream.token_store import RedisTokenStore
 from orchestrator.upstream.translator import MockTranslator, Translator
 from orchestrator.upstream.wso2 import Wso2Config, Wso2Translator
 
@@ -107,6 +113,9 @@ def environment(dotenv: Path | None = None) -> dict[str, str]:
 CONNECT_TIMEOUT = 5
 OPS_STATEMENT_TIMEOUT_MS = 2000
 REDIS_TIMEOUT = 2.0
+#: Redis is on the same host or network: a connection takes milliseconds when
+#: it is up, so waiting long for one only delays the page when it is down.
+REDIS_CONNECT_TIMEOUT = 0.25
 
 
 class ConfigError(RuntimeError):
@@ -115,7 +124,8 @@ class ConfigError(RuntimeError):
 
 @dataclass(frozen=True)
 class Settings:
-    pg_dsn: str
+    # Secrets are left out of repr, so a logged or printed Settings shows none.
+    pg_dsn: str = field(repr=False)  # may carry a password
     redis_url: str
     termbase: Path
     sites: Path
@@ -125,8 +135,10 @@ class Settings:
     upstream_rps: float
     worker_share: float
     audit_actor: str = ""
-    ops_token: str = ""
+    ops_token: str = field(default="", repr=False)
+    client_hash_key: str = field(default="", repr=False)
     distinct_clients: int = 3
+    pg_pool_size: int = 10
     numbers: str = "model"
     wso2: Wso2Config | None = None
 
@@ -153,7 +165,9 @@ class Settings:
             worker_share=float(env.get("DZWEB_WORKER_SHARE", "0.5")),
             audit_actor=env.get("DZWEB_AUDIT_ACTOR", ""),
             ops_token=env.get("DZWEB_OPS_TOKEN", ""),
+            client_hash_key=env.get("DZWEB_CLIENT_HASH_KEY", ""),
             distinct_clients=_positive(env, "DZWEB_DISTINCT_CLIENTS", 3),
+            pg_pool_size=_positive(env, "DZWEB_PG_POOL_SIZE", 10),
             numbers=env.get("DZWEB_NUMBERS", "model"),
             wso2=_wso2(env),
         )
@@ -229,6 +243,7 @@ class Components:
     gauges: Gauges
     ops_conn: Any
     settings: Settings
+    redis: Any = None  # shared by the rate limiters and the token store
 
 
 def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
@@ -240,18 +255,33 @@ def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
     import psycopg
     import redis
     from psycopg.conninfo import conninfo_to_dict
+    from psycopg_pool import ConnectionPool
 
     fmt = MODEL_FORMATS[settings.model_format]
     translator = build_translator(settings, fmt)  # fail fast before touching any service
     termbase = Termbase.load(settings.termbase)
     sites = SiteRegistry.load(settings.sites)
-    conn = ReconnectingConnection(
-        lambda: psycopg.connect(settings.pg_dsn, autocommit=True, connect_timeout=CONNECT_TIMEOUT)
+    # A pool, not one connection: requests in flight together each get their
+    # own (S2.4). Store calls run off the event loop, in threads.
+    conn = PooledConnection(
+        ConnectionPool(
+            settings.pg_dsn,
+            kwargs={"autocommit": True, "connect_timeout": CONNECT_TIMEOUT},
+            min_size=1,
+            max_size=settings.pg_pool_size,
+            timeout=CONNECT_TIMEOUT,  # waiting for a free connection, too
+            check=ConnectionPool.check_connection,  # a dropped connection is replaced (NFR-410)
+            open=True,
+        )
     )
-    if apply_migrations:
-        migrate(conn)
-    elif missing := pending(conn):
-        raise ConfigError(f"database is not migrated ({', '.join(missing)} pending)")
+    try:
+        if apply_migrations:
+            migrate(conn)
+        elif missing := pending(conn):
+            raise ConfigError(f"database is not migrated ({', '.join(missing)} pending)")
+    except BaseException:
+        conn.close()  # the pool's connections and threads, not left to the garbage collector
+        raise
     # Added to whatever options the DSN already carries, never in place of them.
     dsn_options = conninfo_to_dict(settings.pg_dsn).get("options") or ""
     ops_options = f"{dsn_options} -c statement_timeout={OPS_STATEMENT_TIMEOUT_MS}".strip()
@@ -265,8 +295,16 @@ def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
     )
     audit = PostgresAuditLog(conn)
     client = redis.Redis.from_url(
-        settings.redis_url, socket_timeout=REDIS_TIMEOUT, socket_connect_timeout=REDIS_TIMEOUT
+        settings.redis_url,
+        socket_timeout=REDIS_TIMEOUT,
+        socket_connect_timeout=REDIS_CONNECT_TIMEOUT,
     )
+    if isinstance(translator, Wso2Translator):
+        # One access token for the API, the worker and every tool, kept until it
+        # expires, and kept across restarts (asked by GovTech, 2026-10-05).
+        translator.token_store = RedisTokenStore(
+            client, translator.config.token_url, translator.config.client_id
+        )
     store = TranslationStore(
         PostgresTM(conn),
         ResilientCache(RedisCache(client)),
@@ -325,6 +363,7 @@ def build(settings: Settings, *, apply_migrations: bool = True) -> Components:
         },
         ops_conn,
         settings,
+        client,
     )
 
 

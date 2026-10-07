@@ -1,0 +1,951 @@
+{
+ "_comment": "Hand-labelled PILOT sentences for masker recall (S1.3, FR-140): real sentences from the G2C life-events pages (tools/g2c_demo snapshot, 2026-10-05), labelled by hand without consulting the masker. Every phone number, personal email and personal name is replaced by a synthetic value of the same shape; institutional addresses and public URLs are kept. An entity counts as protected only when one masked span covers all of it (a whole phone number with its area code, a whole time). 'tune' may guide pattern changes; 'heldout' must not, and is the recall gate. Splits alternate and were fixed before the first run.",
+ "items": [
+  {
+   "split": "tune",
+   "text": "1. A Bhutanese aged between 18-65 years.",
+   "entities": [
+    {
+     "value": "1",
+     "kind": "NUM"
+    },
+    {
+     "value": "18",
+     "kind": "NUM"
+    },
+    {
+     "value": "65",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "The TAT for processing of Birth Registration is 21 days from the date of submission of duly completed application.",
+   "entities": [
+    {
+     "value": "21",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Note: The Requestor must be a Bhutanese or Special Resident aged above 18 years.",
+   "entities": [
+    {
+     "value": "18",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Email: registration@cdb.gov.bt",
+   "entities": [
+    {
+     "value": "registration@cdb.gov.bt",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Registration fee of Nu. 2,500/- per category of work - for Small Class Contractors;",
+   "entities": [
+    {
+     "value": "Nu. 2,500",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Nu. 100 from the parties (accepts only cash for now)",
+   "entities": [
+    {
+     "value": "Nu. 100",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "2 recent passport size photos",
+   "entities": [
+    {
+     "value": "2",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Apply online http://www.cdb.gov.bt/ezotin/registration services, and from March 18, 2019 through www.citizenservices.gov.bt",
+   "entities": [
+    {
+     "value": "http://www.cdb.gov.bt/ezotin/registration",
+     "kind": "URL"
+    },
+    {
+     "value": "March 18, 2019",
+     "kind": "DATE"
+    },
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Three sets of documents (1 original, 2 copies a one for the court and one for the party)",
+   "entities": [
+    {
+     "value": "1",
+     "kind": "NUM"
+    },
+    {
+     "value": "2",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Go to www.cdb.gov.bt and click on Registration Services.",
+   "entities": [
+    {
+     "value": "www.cdb.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Joint photograph of the Patient and Donor - 2 copies during date of appointment.",
+   "entities": [
+    {
+     "value": "2",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "https://www.jdwnrh.gov.bt/departments/clinical/medical/",
+   "entities": [
+    {
+     "value": "https://www.jdwnrh.gov.bt/departments/clinical/medical/",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "A. Registration fee for downgrade from Large to Medium class Nu. 10,000/- per category",
+   "entities": [
+    {
+     "value": "Nu. 10,000",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "02 300034/300035",
+   "entities": [
+    {
+     "value": "02 300034",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300035",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Click here to view Biometric services available from the Police Stations located in 14 Dzongkhags",
+   "entities": [
+    {
+     "value": "14",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Apply online https://www.citizenservices.gov.bt/cdb/architectIndex, and from March 18, 2019 through www.citizenservices.gov.bt",
+   "entities": [
+    {
+     "value": "https://www.citizenservices.gov.bt/cdb/architectIndex",
+     "kind": "URL"
+    },
+    {
+     "value": "March 18, 2019",
+     "kind": "DATE"
+    },
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "ii.License fee of Nu. 3000 is applicable for small scale industries license.",
+   "entities": [
+    {
+     "value": "Nu. 3000",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Select Sl. # 2 Application for Issuance of License/ Certificate",
+   "entities": [
+    {
+     "value": "2",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "[officer.a@gmail.example,officer.b@ministry.gov.example, officer.c@ministry.gov.example",
+   "entities": [
+    {
+     "value": "officer.a@gmail.example",
+     "kind": "EMAIL"
+    },
+    {
+     "value": "officer.b@ministry.gov.example",
+     "kind": "EMAIL"
+    },
+    {
+     "value": "officer.c@ministry.gov.example",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "If licensee want to change location of business establishment service is available online from www.citizenservices.gov.bt. Applicant can either",
+   "entities": [
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "officer.d@ministry.gov.example",
+   "entities": [
+    {
+     "value": "officer.d@ministry.gov.example",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Visit www.citizenservices.gov.bt and go to Business Services and log in using your user ID and password. Under Online Business Services, click on Sl.# 9 Application for Cancellation of License.",
+   "entities": [
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    },
+    {
+     "value": "9",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Cottage-scale industries are defined as industries with a total fixed capital investment of less than Nu. 1 million.",
+   "entities": [
+    {
+     "value": "Nu. 1",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "-Medium scale Industry- Capital Investment 10 to 100 million -Fee Nu. 30500",
+   "entities": [
+    {
+     "value": "10",
+     "kind": "NUM"
+    },
+    {
+     "value": "100",
+     "kind": "NUM"
+    },
+    {
+     "value": "Nu. 30500",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Email ID: officer.e@ministry.gov.example",
+   "entities": [
+    {
+     "value": "officer.e@ministry.gov.example",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "1) Fee of Nu. 1,000/-",
+   "entities": [
+    {
+     "value": "1",
+     "kind": "NUM"
+    },
+    {
+     "value": "Nu. 1,000",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "3. Ordinary Passport (children below 18 years) Nu. 800/-",
+   "entities": [
+    {
+     "value": "3",
+     "kind": "NUM"
+    },
+    {
+     "value": "18",
+     "kind": "NUM"
+    },
+    {
+     "value": "Nu. 800",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "9:00 am to 12:00 pm and from 02:00pm to 05:00pm.",
+   "entities": [
+    {
+     "value": "9:00",
+     "kind": "DATE"
+    },
+    {
+     "value": "12:00",
+     "kind": "DATE"
+    },
+    {
+     "value": "02:00",
+     "kind": "DATE"
+    },
+    {
+     "value": "05:00",
+     "kind": "DATE"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Any Bhutanese who is 18 years of age and above with valid security clearance + incorporated companies",
+   "entities": [
+    {
+     "value": "18",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Email ID: officer.f@ministry.gov.example and officer.g@ministry.gov.example",
+   "entities": [
+    {
+     "value": "officer.f@ministry.gov.example",
+     "kind": "EMAIL"
+    },
+    {
+     "value": "officer.g@ministry.gov.example",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Email ID: officer.h@ministry.gov.example / officer.i@ministry.gov.example",
+   "entities": [
+    {
+     "value": "officer.h@ministry.gov.example",
+     "kind": "EMAIL"
+    },
+    {
+     "value": "officer.i@ministry.gov.example",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "How to Apply for Online Service: Visit https://www.citizensevices.gov.bt/business >issuance of environment clearance>verify>approve",
+   "entities": [
+    {
+     "value": "https://www.citizensevices.gov.bt/business",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Email ID: first.last@agency.example",
+   "entities": [
+    {
+     "value": "first.last@agency.example",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Online ( www.citizenservices.gov.bt)",
+   "entities": [
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "IV. Card fee Nu. 100 (Cash)",
+   "entities": [
+    {
+     "value": "Nu. 100",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "- Nu. 400 for Lost",
+   "entities": [
+    {
+     "value": "Nu. 400",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Visit website www.citizenservices.gov.bt (Application will be open from 16 May - 6 June, 2016)",
+   "entities": [
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    },
+    {
+     "value": "16 May",
+     "kind": "DATE"
+    },
+    {
+     "value": "6 June, 2016",
+     "kind": "DATE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Falling within 2 Km radial distance from the declared boundary of Thromdes above.",
+   "entities": [
+    {
+     "value": "2",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Standing tree volume equivalent to 200 cft in sawn form based on assessment report submitted by the Gewog Livestock Sector and Gewog administration.",
+   "entities": [
+    {
+     "value": "200",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "16 cubic meters in a year per household or religious institutions where there is no electricity connection.",
+   "entities": [
+    {
+     "value": "16",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "The Department may designate an authorized agency to allot 108 flag poles in the urban area at rural royalty at the option of the applicant.",
+   "entities": [
+    {
+     "value": "108",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Note: One where a minimum of fifteen (15) natural persons who are Bhutanese",
+   "entities": [
+    {
+     "value": "15",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Nu.100 as Registration fee.",
+   "entities": [
+    {
+     "value": "Nu.100",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Security Deposit nu.50,000 refundable",
+   "entities": [
+    {
+     "value": "nu.50,000",
+     "kind": "CUR"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Changjiji Site office: 300528",
+   "entities": [
+    {
+     "value": "300528",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "- https://bcsea.online : Index Number and date of birth",
+   "entities": [
+    {
+     "value": "https://bcsea.online",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "SERVICE NAME:View Result (Both Class 10 & 12)(BCSEA)BRIEF DESCRIPTION:",
+   "entities": [
+    {
+     "value": "10",
+     "kind": "NUM"
+    },
+    {
+     "value": "12",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Nu. 10,100.00. Applicant can either pay onlinewww.citizenservices.gov.bt OR visit payment counters",
+   "entities": [
+    {
+     "value": "Nu. 10,100.00",
+     "kind": "CUR"
+    },
+    {
+     "value": "www.citizenservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "officer.j@ministry.gov.example 06-300183",
+   "entities": [
+    {
+     "value": "officer.j@ministry.gov.example",
+     "kind": "EMAIL"
+    },
+    {
+     "value": "06-300183",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Doebum LamP.O. Box 141,",
+   "entities": [
+    {
+     "value": "141",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Access for feedback is available via telephone electronic media like emails (lipd@moice.gov.bt) and whatsapp",
+   "entities": [
+    {
+     "value": "lipd@moice.gov.bt",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "The size of the photograph should be 45 mm x 35 mm with your facial image taking up 70 to 80 % of the photograph and the photograph must be:",
+   "entities": [
+    {
+     "value": "45",
+     "kind": "NUM"
+    },
+    {
+     "value": "35",
+     "kind": "NUM"
+    },
+    {
+     "value": "70",
+     "kind": "NUM"
+    },
+    {
+     "value": "80",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "3-7working days as per SOP",
+   "entities": [
+    {
+     "value": "3",
+     "kind": "NUM"
+    },
+    {
+     "value": "7",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "available at (www.cdb.gov.bt or www.citizinservices.gov.bt.)",
+   "entities": [
+    {
+     "value": "www.cdb.gov.bt",
+     "kind": "URL"
+    },
+    {
+     "value": "www.citizinservices.gov.bt",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Registered21500.00",
+   "entities": [
+    {
+     "value": "21500.00",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Surveyor(Private)22000",
+   "entities": [
+    {
+     "value": "22000",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "https://www.citizenservices.gov.bt/G2CPaymentAggregator/redirect.html?param=makepayment",
+   "entities": [
+    {
+     "value": "https://www.citizenservices.gov.bt/G2CPaymentAggregator/redirect.html?param=makepayment",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "The system can be availed online through https://mocp.doc.gov.bt/.",
+   "entities": [
+    {
+     "value": "https://mocp.doc.gov.bt/",
+     "kind": "URL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Email ID: officer2011@gmail.example /officer.k@ministry.gov.example/",
+   "entities": [
+    {
+     "value": "officer2011@gmail.example",
+     "kind": "EMAIL"
+    },
+    {
+     "value": "officer.k@ministry.gov.example",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Call 02-300846 or email us at: dcrc@moha.gov.bt",
+   "entities": [
+    {
+     "value": "02-300846",
+     "kind": "PHONE"
+    },
+    {
+     "value": "dcrc@moha.gov.bt",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Royal Bhutan Police, Security Clearance Service: 00975-02-300347 (Ext: 2212/2125)",
+   "entities": [
+    {
+     "value": "00975-02-300347",
+     "kind": "PHONE"
+    },
+    {
+     "value": "2212",
+     "kind": "NUM"
+    },
+    {
+     "value": "2125",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Bureau of Law and Order, MoHCA: 00975-02-300015 (Ext:2070) OR 00975-02-300173/00975-77000135/00975-77000136 (Ext: 2038)",
+   "entities": [
+    {
+     "value": "00975-02-300015",
+     "kind": "PHONE"
+    },
+    {
+     "value": "2070",
+     "kind": "NUM"
+    },
+    {
+     "value": "00975-02-300173",
+     "kind": "PHONE"
+    },
+    {
+     "value": "00975-77000135",
+     "kind": "PHONE"
+    },
+    {
+     "value": "00975-77000136",
+     "kind": "PHONE"
+    },
+    {
+     "value": "2038",
+     "kind": "NUM"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "ii. Applicant can provide their comments, suggestions, or complaints about the service via phone # 300295, email us # issd@moice.gov.bt",
+   "entities": [
+    {
+     "value": "300295",
+     "kind": "PHONE"
+    },
+    {
+     "value": "issd@moice.gov.bt",
+     "kind": "EMAIL"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Phone number: [(1) Officer A: 77000357. (2) Officer B: 05200320. (3) Officer C: 17000528. (4) Officer D:17000675. (5) Officer E: 07-200315]",
+   "entities": [
+    {
+     "value": "1",
+     "kind": "NUM"
+    },
+    {
+     "value": "77000357",
+     "kind": "PHONE"
+    },
+    {
+     "value": "2",
+     "kind": "NUM"
+    },
+    {
+     "value": "05200320",
+     "kind": "PHONE"
+    },
+    {
+     "value": "3",
+     "kind": "NUM"
+    },
+    {
+     "value": "17000528",
+     "kind": "PHONE"
+    },
+    {
+     "value": "4",
+     "kind": "NUM"
+    },
+    {
+     "value": "17000675",
+     "kind": "PHONE"
+    },
+    {
+     "value": "5",
+     "kind": "NUM"
+    },
+    {
+     "value": "07-200315",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "contact to respective Regional Office of Economic Affairs: Thimphu:02-300622, Phuenstsholing:05-200320,",
+   "entities": [
+    {
+     "value": "02-300622",
+     "kind": "PHONE"
+    },
+    {
+     "value": "05-200320",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Samdrup Jongkhar:07-200690, Mongar:04-600634/600123, Trongsa:",
+   "entities": [
+    {
+     "value": "07-200690",
+     "kind": "PHONE"
+    },
+    {
+     "value": "04-600634",
+     "kind": "PHONE"
+    },
+    {
+     "value": "600123",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Applicant can provide their comments, suggestions, or complaints about the service via phone # 02 300295 or",
+   "entities": [
+    {
+     "value": "02 300295",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Phone number: +975-17000862",
+   "entities": [
+    {
+     "value": "+975-17000862",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Phone number: 02-300624 / 300623",
+   "entities": [
+    {
+     "value": "02-300624",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300623",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "heldout",
+   "text": "Contact # 02-300176, 300175, 300805",
+   "entities": [
+    {
+     "value": "02-300176",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300175",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300805",
+     "kind": "PHONE"
+    }
+   ]
+  },
+  {
+   "split": "tune",
+   "text": "Phone: +975 2 300724/300546/300559 Website: www.bcsea.bt",
+   "entities": [
+    {
+     "value": "+975 2 300724",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300546",
+     "kind": "PHONE"
+    },
+    {
+     "value": "300559",
+     "kind": "PHONE"
+    },
+    {
+     "value": "www.bcsea.bt",
+     "kind": "URL"
+    }
+   ]
+  }
+ ]
+}

@@ -16,7 +16,9 @@ What this client promises the rest of the service:
   ``concurrency``; the quota manager (FR-156) decides how many are made at all.
 * **A token is fetched once and reused** until a minute before it expires,
   and fetched again once if the gateway refuses it. Concurrent callers share
-  one fetch.
+  one fetch. With a ``token_store`` (Redis, wired in ``build``), other
+  processes and the next restart reuse it too; GovTech asked for exactly this
+  on 2026-10-05. If the store fails, the client fetches as it would without one.
 * **Every failure is an UpstreamError**, which the request path turns into
   English now and a background retry (NFR-410). A translation call is safe to
   repeat, so the one retry after a refused token cannot double anything.
@@ -35,7 +37,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -72,12 +74,26 @@ class Wso2Config:
         return f"Wso2Config(url={self.url!r}, model_version={self.model_version!r})"
 
 
+class TokenStore(Protocol):
+    """Where processes share a token (orchestrator/upstream/token_store.py)."""
+
+    def get(self) -> tuple[str, float] | None: ...
+    def put(self, token: str, seconds: float) -> None: ...
+    def discard(self, token: str) -> None: ...
+
+
 class Wso2Translator:
     """The ``Translator`` the service uses in production (orchestrator/upstream/translator.py)."""
 
-    def __init__(self, config: Wso2Config, http: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        config: Wso2Config,
+        http: httpx.AsyncClient | None = None,
+        token_store: TokenStore | None = None,
+    ) -> None:
         self.config = config
         self.model_version = config.model_version
+        self.token_store = token_store
         self._owns_http = http is None
         self._http = http or self._new_http()
         self._token: str | None = None
@@ -87,6 +103,7 @@ class Wso2Translator:
         self._loop: asyncio.AbstractEventLoop | None = None
         self.calls = 0
         self.token_fetches = 0
+        self.tokens_reused = 0  # taken from the store instead of the token server
 
     async def translate(self, model_text: str, reference: Segment) -> str:
         if not model_text.strip():
@@ -109,10 +126,38 @@ class Wso2Translator:
     async def _bearer(self, refresh: bool = False) -> str:
         lock, _ = self._loop_bound()
         async with lock:
-            if refresh or self._token is None or time.monotonic() >= self._expires_at:
-                await self._fetch_token()
+            refused = None
+            if refresh and self._token is not None:
+                refused, self._token = self._token, None
+                self._shared("discard", refused)
+            if self._token is None or time.monotonic() >= self._expires_at:
+                if not self._adopt_shared(refused):
+                    await self._fetch_token()
             assert self._token is not None
             return self._token
+
+    def _adopt_shared(self, refused: str | None) -> bool:
+        """Use the token another process (or the last run) stored, if it is still good."""
+        shared = self._shared("get")
+        if not shared:
+            return False
+        token, seconds = shared
+        if seconds <= 0 or token == refused:
+            return False
+        self._token = token
+        self._expires_at = time.monotonic() + seconds
+        self.tokens_reused += 1
+        return True
+
+    def _shared(self, action: str, *args: Any) -> Any:
+        """A token-store call that can never fail a translation."""
+        if self.token_store is None:
+            return None
+        try:
+            return getattr(self.token_store, action)(*args)
+        except Exception as err:  # noqa: BLE001 - any store failure means: fetch as usual
+            log.warning("token store %s failed: %s", action, type(err).__name__)
+            return None
 
     async def _fetch_token(self) -> None:
         try:
@@ -136,8 +181,10 @@ class Wso2Translator:
             raise UpstreamBadResponse("token response carried no access_token")
         lifetime = grant.get("expires_in")
         seconds = float(lifetime) if isinstance(lifetime, int | float) else 300.0
+        usable = max(0.0, seconds - TOKEN_MARGIN_SECONDS)
         self._token = token
-        self._expires_at = time.monotonic() + max(0.0, seconds - TOKEN_MARGIN_SECONDS)
+        self._expires_at = time.monotonic() + usable
+        self._shared("put", token, usable)
 
     # -- translate ------------------------------------------------------------
 

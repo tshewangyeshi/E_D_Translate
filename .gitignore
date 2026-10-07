@@ -36,3 +36,6 @@ adapters/widget/playwright-report/
 
 # Local snapshot of the G2C portal (officials' contact details; never commit)
 tools/g2c_demo/data/
+
+# Frozen evaluation set: real government text, never public (S10.1, NFR-202)
+eval/frozen/

@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -74,10 +75,10 @@ class FakeGateway:
         self.translate_requests.append(request)
         return self.translate(request)
 
-    def client(self) -> Wso2Translator:
+    def client(self, token_store: Any = None) -> Wso2Translator:
         config = Wso2Config(URL, TOKEN_URL, CLIENT_ID, SECRET, "model-x", concurrency=2)
         transport = httpx.MockTransport(self.handler)
-        return Wso2Translator(config, httpx.AsyncClient(transport=transport))
+        return Wso2Translator(config, httpx.AsyncClient(transport=transport), token_store)
 
 
 def run(coro: Any) -> Any:
@@ -328,3 +329,103 @@ def test_fr100_staging_translates_one_sentence() -> None:
     sentence = "Apply for a passport online."
     out = run(client.translate(sentence, parse(sentence)))
     assert out.strip() and out != sentence
+
+
+# --- one token for every process, until it expires (asked by GovTech, 2026-10-05) ---
+
+
+class MemoryTokenStore:
+    """What Redis does for RedisTokenStore, without Redis."""
+
+    def __init__(self) -> None:
+        self.value: tuple[str, float] | None = None
+        self.puts: list[float] = []
+
+    def get(self) -> tuple[str, float] | None:
+        return self.value
+
+    def put(self, token: str, seconds: float) -> None:
+        self.puts.append(seconds)
+        self.value = (token, seconds)
+
+    def discard(self, token: str) -> None:
+        if self.value and self.value[0] == token:
+            self.value = None
+
+
+class BrokenTokenStore:
+    def get(self) -> Any:
+        raise ConnectionError("redis down")
+
+    put = discard = get  # type: ignore[assignment]
+
+
+def test_fr155_processes_and_restarts_share_one_token() -> None:
+    gw, store = FakeGateway(), MemoryTokenStore()
+    run(gw.client(store).translate("api process", REF))
+    worker = gw.client(store)
+    run(worker.translate("worker process", REF))
+    run(gw.client(store).translate("after a restart", REF))
+    assert gw.tokens_issued == 1
+    assert worker.tokens_reused == 1
+    assert {r.headers["authorization"] for r in gw.translate_requests} == {"Bearer token-1"}
+
+
+def test_fr155_the_shared_token_expires_a_minute_before_the_gateway_says() -> None:
+    gw, store = FakeGateway(), MemoryTokenStore()
+    run(gw.client(store).translate("text", REF))
+    assert store.puts == [3600 - 60]
+
+
+def test_fr155_an_expired_shared_token_is_not_used() -> None:
+    gw, store = FakeGateway(), MemoryTokenStore()
+    store.value = ("stale-token", 0.0)
+    run(gw.client(store).translate("text", REF))
+    assert gw.tokens_issued == 1
+    assert gw.translate_requests[0].headers["authorization"] == "Bearer token-1"
+
+
+def test_nfr410_a_refused_shared_token_is_replaced_for_everyone() -> None:
+    gw, store = FakeGateway(), MemoryTokenStore()
+    store.value = ("revoked-token", 1000.0)
+
+    def refuse_revoked(request: httpx.Request) -> httpx.Response:
+        if request.headers["authorization"] == "Bearer revoked-token":
+            return httpx.Response(401, json={"code": "900901"})
+        return gw.ok(request)
+
+    gw.translate = refuse_revoked
+    assert run(gw.client(store).translate("text", REF)) == "DZ[text]"
+    assert gw.tokens_issued == 1
+    assert store.value is not None and store.value[0] == "token-1"
+    run(gw.client(store).translate("another process", REF))
+    assert gw.tokens_issued == 1  # the next process takes the new one
+
+
+def test_nfr410_a_failing_token_store_never_fails_a_translation(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    gw = FakeGateway()
+    with caplog.at_level(logging.WARNING):
+        assert run(gw.client(BrokenTokenStore()).translate("text", REF)) == "DZ[text]"
+    assert gw.tokens_issued == 1
+    assert "token-1" not in caplog.text and SECRET not in caplog.text
+
+
+@pytest.mark.integration
+def test_fr155_redis_keeps_the_token_until_it_expires(redis_client: Any) -> None:
+    from orchestrator.upstream.token_store import RedisTokenStore
+
+    store = RedisTokenStore(redis_client, TOKEN_URL, CLIENT_ID)
+    assert store.get() is None
+    store.put("token-1", 120)
+    token, seconds = store.get() or ("", 0.0)
+    assert token == "token-1" and 119 < seconds <= 120  # noqa: S105 - a fake token
+    assert SECRET not in str(redis_client.keys("*")) and CLIENT_ID not in store.key
+    store.discard("some-other-token")
+    assert store.get() is not None
+    store.discard("token-1")
+    assert store.get() is None
+    store.put("short", 0.05)
+    time.sleep(0.2)
+    assert store.get() is None

@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
@@ -166,35 +167,84 @@ class RedisSeenCounter:
         return int(pipe.execute()[-1])
 
 
+#: After Redis fails, how long calls skip it before one is let through to test it.
+BREAKER_COOLDOWN_SECONDS = 5.0
+
+
+@dataclass
+class Breaker:
+    """Stop calling a backend that just failed, for a while (S10.4, ER-21).
+
+    Absorbing each failure is not enough: a request touches the cache once per
+    segment, and with Redis unreachable every touch waits for its connect
+    timeout -- measured at 2 s a call, over two minutes for a 64-segment page.
+    Open after one failure; while open, calls are skipped at once (and counted
+    as failures, so the metric shows the outage); after the cooldown one call
+    is let through, and success closes it again.
+    """
+
+    cooldown: float = BREAKER_COOLDOWN_SECONDS
+    clock: Callable[[], float] = time.monotonic
+    open_until: float = 0.0
+
+    @property
+    def open(self) -> bool:
+        return self.clock() < self.open_until
+
+    def failed(self) -> None:
+        self.open_until = self.clock() + self.cooldown
+
+    def succeeded(self) -> None:
+        self.open_until = 0.0
+
+
 @dataclass
 class ResilientCache:
     """Never raises (FR-151, NFR-410). Failures read as misses and are counted."""
 
     inner: Cache
     failures: int = 0
+    breaker: Breaker = field(default_factory=Breaker)
 
-    def _failed(self, op: str, err: Exception) -> None:
+    def _failed(self, op: str, err: Exception | None) -> None:
         self.failures += 1
-        log.warning("cache %s failed; degrading to TM/live: %s", op, type(err).__name__)
+        if err is not None:
+            self.breaker.failed()
+            log.warning("cache %s failed; degrading to TM/live: %s", op, type(err).__name__)
 
     def get_many(self, keys: Sequence[str]) -> dict[str, Stored]:
+        if self.breaker.open:
+            self._failed("get", None)
+            return {}
         try:
-            return self.inner.get_many(keys)
+            found = self.inner.get_many(keys)
         except Exception as err:  # noqa: BLE001 - any backend failure degrades
             self._failed("get", err)
             return {}
+        self.breaker.succeeded()
+        return found
 
     def set(self, key: str, value: Stored, ttl_seconds: int | None) -> None:
+        if self.breaker.open:
+            self._failed("set", None)
+            return
         try:
             self.inner.set(key, value, ttl_seconds)
         except Exception as err:  # noqa: BLE001
             self._failed("set", err)
+            return
+        self.breaker.succeeded()
 
     def delete_many(self, keys: Sequence[str]) -> None:
+        if self.breaker.open:
+            self._failed("delete", None)
+            return
         try:
             self.inner.delete_many(keys)
         except Exception as err:  # noqa: BLE001
             self._failed("delete", err)
+            return
+        self.breaker.succeeded()
 
 
 @dataclass
@@ -203,11 +253,18 @@ class ResilientSeenCounter:
 
     inner: SeenCounter
     failures: int = 0
+    breaker: Breaker = field(default_factory=Breaker)
 
     def observe(self, segment_key: str, client_hash: str) -> int:
+        if self.breaker.open:
+            self.failures += 1
+            return 0
         try:
-            return self.inner.observe(segment_key, client_hash)
+            seen = self.inner.observe(segment_key, client_hash)
         except Exception as err:  # noqa: BLE001
             self.failures += 1
+            self.breaker.failed()
             log.warning("seen-counter failed; not persisting: %s", type(err).__name__)
             return 0
+        self.breaker.succeeded()
+        return seen

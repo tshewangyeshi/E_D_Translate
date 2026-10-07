@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -274,18 +274,18 @@ class TranslationStore:
         author: str,
         term_ids: Iterable[str],
         site_id: str | None = None,
+        action: Action = Action.REVIEW_APPROVE,
+        detail: Mapping[str, object] | None = None,
     ) -> Stored:
+        """A human translation, approved. ``action`` says how it arrived: through
+        review, or an offline seed import (FR-413), which is audited as one (FR-620)."""
         subject = f"segment:{keys.segment_key}"
         # Refuse before changing anything: an approval whose record could not be
         # written must not exist, on any backend, with or without a transaction.
         # Only the version id is unknown yet, and any id validates the same.
+        extra = dict(detail or {})
         validated(
-            AuditEvent(
-                author,
-                Action.REVIEW_APPROVE,
-                subject,
-                {"version_id": 0, "site_id": site_id},
-            )
+            AuditEvent(author, action, subject, {"version_id": 0, "site_id": site_id, **extra})
         )
         with self.atomic():
             stored = self.tm.approve(
@@ -301,9 +301,9 @@ class TranslationStore:
             self.audit.record(
                 AuditEvent(
                     actor=author,
-                    action=Action.REVIEW_APPROVE,
+                    action=action,
                     subject=subject,
-                    detail={"version_id": stored.version_id, "site_id": site_id},
+                    detail={"version_id": stored.version_id, "site_id": site_id, **extra},
                 )
             )
         # The cache is touched only once the approval and its record are both in.
@@ -342,8 +342,14 @@ class TranslationStore:
         return result
 
     def expire_machine(self, before: datetime) -> int:
-        """Retention for unapproved machine translations (NFR-305)."""
-        return self.tm.expire_machine(before)
+        """Retention for unapproved machine translations (NFR-305), TM and cache.
+
+        The cached copies go too: they used to outlive retention by up to the
+        cache's 7 days, still being served (found by the S10.4 fault suite).
+        """
+        keys = self.tm.expire_machine(before)
+        self.cache.delete_many([MACHINE_NS + k for k in keys])
+        return len(keys)
 
     def count_machine_before(self, before: datetime) -> int:
         """Size of the next retention run, so an operator can look before leaping."""

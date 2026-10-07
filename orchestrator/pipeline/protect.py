@@ -45,32 +45,55 @@ MONTH = (
     r"Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
 )
 
+#: More numbers on the same exchange: "/ 337623", ", 337175".
+_MORE_LINES = r"(?:\s?[/,]\s?\d{6}(?!\d))*"
+
 #: Longest-context first; left to right; non-overlapping; first pattern wins.
 #: The final NUM pattern is a catch-all: no digit run reaches the model unmasked.
 PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # With a scheme, or a bare www. host as the pilot portal writes them
-    # ("www.judiciary.gov.bt"); the leak scan treats both as addresses.
+    # ("www.judiciary.gov.bt", even glued to a word: "pay onlinewww.…");
+    # the leak scan treats both as addresses.
     (
         "URL",
-        re.compile(r"(?:https?://|(?<![\w.@])www\.)[^\s<>\"']+[^\s<>\"'.,;:!?)]", re.IGNORECASE),
+        re.compile(r"(?:https?://|(?<![.@])www\.)[^\s<>\"']+[^\s<>\"'.,;:!?)]", re.IGNORECASE),
     ),
     ("EMAIL", re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")),
     ("CID", re.compile(r"\b\d{11}\b")),
-    # Phone numbers: +975 with digits and spaces, or a standalone 7-8 digit run
-    # (Bhutan landlines and mobiles). Never sent to the model, whatever the
-    # numbers setting: a number written in Tibetan digits cannot be dialled.
-    ("PHONE", re.compile(r"\+975[\d\s-]{6,12}\d|\b\d{7,8}\b")),
+    # Phone numbers, as the pilot portal writes them (labelled-pilot.json):
+    # +975 or 00975 with a landline or mobile; a landline with its area code,
+    # "02-321733", "02 326034"; numbers sharing that code, "02-337624 / 337623",
+    # "02-337176, 337175"; or a standalone 7-8 digit run. Never sent to the
+    # model, whatever the numbers setting: Tibetan digits cannot be dialled.
+    (
+        "PHONE",
+        re.compile(
+            # An exchange list: "00975-02-(321811/322497/322496)".
+            r"(?:\+|\b00)975[\s-]?\d{1,2}[\s-]?\(\d{6}(?:\s?/\s?\d{6})*\)"
+            + r"|(?:\+|\b00)975[\s-]?(?:\d{1,2}[\s-]?\d{6}|[17]\d{7})(?!\d)"
+            + _MORE_LINES
+            + r"|\+975[\d\s-]{6,12}\d"
+            + r"|(?<![\d.,])0[2-8][\s-]\d{6}(?!\d)"
+            + _MORE_LINES
+            + r"|\b\d{7,8}\b"
+        ),
+    ),
     (
         "REF",
         re.compile(r"\b[A-Za-z]{2,}(?:[/-][A-Za-z0-9]+)*[/-]\d[A-Za-z0-9]*(?:[/-][A-Za-z0-9]+)*\b"),
     ),
-    ("CUR", re.compile(r"(?:\bNu\.?|\bBTN|\bNgultrum)\s?" + AMOUNT)),
+    ("CUR", re.compile(r"(?:\b[Nn][Uu]\.?|\bBTN|\bNgultrum)\s?" + AMOUNT)),
     (
         "DATE",
         re.compile(
             r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"
             r"|\b\d{1,2}(?:st|nd|rd|th)?\s+" + MONTH + r"\.?,?\s+\d{4}\b"
             r"|\b" + MONTH + r"\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b"
+            # A month and year, "April 2019"; a day and month with no year,
+            # "16 May"; a time, "9:00", "02:00pm".
+            r"|\b" + MONTH + r"\.?,?\s+\d{4}\b"
+            r"|\b\d{1,2}(?:st|nd|rd|th)?\s+" + MONTH + r"\b"
+            r"|\b\d{1,2}:\d{2}(?:\s?[AaPp]\.?[Mm]\b\.?)?(?![\d:])"
         ),
     ),
     ("PCT", re.compile(r"\b\d+(?:\.\d+)?\s?%")),
@@ -137,10 +160,31 @@ def _spans(text: str) -> list[tuple[int, int, str]]:
         for m in pattern.finditer(text):
             if m.start() == m.end():
                 continue
-            if any(m.start() < b and a < m.end() for a, b, _ in taken):
+            end = _url_end(text, m.start(), m.end()) if kind == "URL" else m.end()
+            if any(m.start() < b and a < end for a, b, _ in taken):
                 continue
-            taken.append((m.start(), m.end(), kind))
+            taken.append((m.start(), end, kind))
     return sorted(taken)
+
+
+def _url_end(text: str, start: int, end: int) -> int:
+    """A URL stops at a closing bracket it did not open, and keeps one it did.
+
+    The pilot portal writes "(http://.../bcsearesult/)and also": without this
+    the URL ran on through ")and" and swallowed a word. A bracket the URL
+    opened itself, as in ".../wiki/Gross_(economics)", stays part of it.
+    """
+    depth = 0
+    for n in range(start, end):
+        if text[n] == "(":
+            depth += 1
+        elif text[n] == ")":
+            if depth == 0:
+                return n
+            depth -= 1
+    if depth > 0 and text[end : end + 1] == ")":
+        return end + 1
+    return end
 
 
 def find_entities(text: str) -> list[tuple[int, int, str]]:

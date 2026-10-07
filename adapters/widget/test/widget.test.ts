@@ -121,6 +121,44 @@ describe("translating (FR-210, FR-214)", () => {
     expect(document.querySelector("p")?.hasAttribute("lang")).toBe(false);
   });
 
+  it("fr122_a_tag_fallback_block_stays_english_with_its_nodes_untouched", async () => {
+    document.body.innerHTML = '<p>Click <a href="/apply">here</a> to apply.</p>';
+    const link = document.querySelector("a");
+    const before = document.body.innerHTML;
+    const { widget } = makeWidget({
+      translate: [
+        {
+          body: {
+            segments: [{ id: "s0", text: "Click ⟦1⟧here⟦/1⟧ to apply.", status: "tag_fallback" }],
+          },
+        },
+      ],
+    });
+    await widget.start();
+    await widget.translate();
+    expect(document.body.innerHTML).toBe(before);
+    expect(document.querySelector("a")).toBe(link); // the same node, not a rebuilt one
+  });
+
+  it("fr210_a_translation_whose_tags_do_not_fit_the_block_is_refused", async () => {
+    // Defence in depth: even marked "translated", markers that do not match the
+    // block's nodes must leave it English; the widget never restructures (FR-210).
+    document.body.innerHTML = '<p>Click <a href="/apply">here</a> to apply.</p>';
+    const before = document.body.innerHTML;
+    const { widget } = makeWidget({
+      translate: [
+        {
+          body: {
+            segments: [{ id: "s0", text: "DZ ⟦1⟧a⟦/1⟧ ⟦2⟧b⟦/2⟧", status: "translated" }],
+          },
+        },
+      ],
+    });
+    await widget.start();
+    await widget.translate();
+    expect(document.body.innerHTML).toBe(before);
+  });
+
   it("fr212_toggling_back_restores_the_english", async () => {
     const { widget } = makeWidget({
       translate: [{ body: { segments: [{ id: "s0", text: "DZ-text", status: "translated" }] } }],

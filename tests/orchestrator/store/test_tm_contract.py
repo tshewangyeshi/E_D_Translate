@@ -114,7 +114,7 @@ def test_nfr305_retention_expires_old_machine_rows_only(tm: Any) -> None:
     _mt(tm, "m" * 64, "machine")
     _approve(tm, "a" * 64, "human")
     expired = tm.expire_machine(datetime.now(UTC) + timedelta(seconds=5))
-    assert expired == 1
+    assert expired == ["m" * 64]  # the keys, so the cache can drop them too
     approved, machine = tm.lookup(["a" * 64], ["m" * 64])
     assert machine == {} and set(approved) == {"a" * 64}
 

@@ -111,7 +111,9 @@ class TranslationMemory(Protocol):
 
     def migrate_pipeline(self, rekey: RekeyFn) -> MigrationReport: ...
 
-    def expire_machine(self, before: datetime) -> int: ...
+    def expire_machine(self, before: datetime) -> list[str]:
+        """Invalidate old machine translations; the lookup keys, so caches can drop them."""
+        ...
 
     def count_machine_before(self, before: datetime) -> int: ...
 
@@ -359,15 +361,15 @@ class InMemoryTM:
                 rekeyed += 1
         return MigrationReport(rekeyed, rechecked)
 
-    def expire_machine(self, before: datetime) -> int:
+    def expire_machine(self, before: datetime) -> list[str]:
         """Retention (NFR-305): invalidate machine translations created before ``before``."""
-        count = 0
+        keys = []
         for vid, v in list(self._versions.items()):
             if self._expirable(v, before):
                 self._versions[vid] = replace(v, invalidated_at=_now())
-                count += 1
+                keys.append(v.lookup_key)
         self._close_invalidated()
-        return count
+        return keys
 
     def count_machine_before(self, before: datetime) -> int:
         """What ``expire_machine`` would invalidate, without invalidating it."""

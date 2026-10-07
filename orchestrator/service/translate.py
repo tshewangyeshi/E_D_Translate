@@ -33,7 +33,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from orchestrator.governance.sites import Site, resolve_tier
 from orchestrator.ops.health import UpstreamHealth
@@ -49,7 +49,7 @@ from orchestrator.pipeline.glossary import (
 )
 from orchestrator.pipeline.protect import EntityCheckError, EntityMap, mask, restore
 from orchestrator.pipeline.segment import Entity, ModelFormat, Segment, SegmentError, parse
-from orchestrator.pipeline.tags import check_tags
+from orchestrator.pipeline.tags import check_tags, collapse_formatting
 from orchestrator.queue.jobs import PRIORITY_LIVE_DEFERRED, Job, JobQueue
 from orchestrator.service.model_call import calls_needed, translate_segment
 from orchestrator.service.status import Status
@@ -81,6 +81,9 @@ class SegmentOut:
     segment_key: str | None = None
     origin: Origin | None = None
     reason: str | None = None  # stable sub-cause for metrics; not shown to citizens
+    #: The model answered for this segment in this request and its output was
+    #: checked, whatever the outcome: the denominator of tag integrity (S1.5).
+    model_checked: bool = False
 
 
 @dataclass
@@ -141,7 +144,26 @@ class TranslateService:
         client_hash: str,
         segments: list[SegmentIn],
         path: object = None,
+        *,
+        markup: bool = False,
     ) -> list[SegmentOut]:
+        """Translate a batch. ``markup`` is for callers that write new markup
+        (proxy, CMS, ``/v1/translate/html``): a tag-integrity failure there
+        serves the translation with its formatting collapsed (FR-123) instead of
+        English. The widget never sets it (FR-210).
+
+        Store work (lookups, writes, the queue) runs in a worker thread, so a
+        slow database holds up this request only, not every request this process
+        is serving (S2.4). Model calls stay on the event loop."""
+        out, prepared, live = await asyncio.to_thread(self._plan, site, client_hash, segments, path)
+        if live:
+            out.update(await self._translate_live(site, {n: prepared[n] for n in live}, markup))
+        return self._ordered(segments, out)
+
+    def _plan(
+        self, site: Site, client_hash: str, segments: list[SegmentIn], path: object
+    ) -> tuple[dict[int, SegmentOut], dict[int, _Prepared], list[int]]:
+        """Everything before the model: answers so far, and which segments go live."""
         out: dict[int, SegmentOut] = {}
         prepared: dict[int, _Prepared] = {}
         for n, seg_in in enumerate(segments):
@@ -156,7 +178,7 @@ class TranslateService:
             log.warning("lookup failed; serving source text: %s", type(err).__name__)
             for n, p in prepared.items():
                 out[n] = self._fail(p.seg_in, p.keys, Status.UPSTREAM_ERROR, "store_unavailable")
-            return self._ordered(segments, out)
+            return out, prepared, []
 
         live: list[int] = []
         for (n, p), hit in zip(prepared.items(), hits, strict=True):
@@ -174,10 +196,7 @@ class TranslateService:
                 live.append(n)
             else:
                 out[n] = self._defer(site, p, "no_live_quota")
-
-        if live:
-            out.update(await self._translate_live(site, {n: prepared[n] for n in live}))
-        return self._ordered(segments, out)
+        return out, prepared, live
 
     # -- steps ----------------------------------------------------------------
 
@@ -214,10 +233,13 @@ class TranslateService:
         Entities and terms first, so a duplicated entity or term is reported as
         entity_check_failed / glossary_term_missing, not as a generic tag failure.
         """
-        restored = restore(model_output, p.with_terms, p.entities)
-        restored = restore_terms(restored, p.with_terms, p.terms)
+        restored = self._restore(p, model_output)
         check_tags(restored, p.with_terms)
         return restored
+
+    def _restore(self, p: _Prepared, model_output: Segment) -> Segment:
+        restored = restore(model_output, p.with_terms, p.entities)
+        return restore_terms(restored, p.with_terms, p.terms)
 
     def _serve_hit(self, site: Site, p: _Prepared, hit: Hit) -> SegmentOut:
         try:
@@ -253,7 +275,7 @@ class TranslateService:
         return self._fail(p.seg_in, p.keys, Status.PENDING_MT, reason)
 
     async def _translate_live(
-        self, site: Site, items: dict[int, _Prepared]
+        self, site: Site, items: dict[int, _Prepared], markup: bool = False
     ) -> dict[int, SegmentOut]:
         tasks = {
             n: asyncio.create_task(translate_segment(self.translator, self.fmt, p.with_terms))
@@ -264,6 +286,17 @@ class TranslateService:
         )
         for task in pending:
             task.cancel()
+        # Checking and storing the answers is store work: off the event loop too.
+        return await asyncio.to_thread(self._settle, site, items, tasks, pending, markup)
+
+    def _settle(
+        self,
+        site: Site,
+        items: dict[int, _Prepared],
+        tasks: dict[int, asyncio.Task[Segment]],
+        pending: set[asyncio.Task[Segment]],
+        markup: bool,
+    ) -> dict[int, SegmentOut]:
         out: dict[int, SegmentOut] = {}
         for n, task in tasks.items():
             p = items[n]
@@ -278,7 +311,10 @@ class TranslateService:
                 # further was checked, the glossary included.
                 self.upstream.succeeded()
                 self.metrics.model_outputs[Status.TAG_FALLBACK.value] += 1
-                out[n] = self._fail(p.seg_in, p.keys, Status.TAG_FALLBACK, _reason(err))
+                out[n] = replace(
+                    self._fail(p.seg_in, p.keys, Status.TAG_FALLBACK, _reason(err)),
+                    model_checked=True,
+                )
                 continue
             except UpstreamError as err:
                 self._upstream_failed(type(err).__name__)
@@ -291,18 +327,38 @@ class TranslateService:
                 continue
             if calls_needed(p.with_terms):
                 self.upstream.succeeded()
-            out[n] = self._accept_model_output(site, p, decoded)
+            out[n] = replace(
+                self._accept_model_output(site, p, decoded, markup), model_checked=True
+            )
         return out
 
     def _upstream_failed(self, kind: str) -> None:
         self.upstream.failed(kind)
         self.metrics.upstream_errors[kind] += 1
 
-    def _accept_model_output(self, site: Site, p: _Prepared, decoded: Segment) -> SegmentOut:
+    def _accept_model_output(
+        self, site: Site, p: _Prepared, decoded: Segment, markup: bool = False
+    ) -> SegmentOut:
         try:
             final = self._finalise(p, decoded)
         except SegmentError as err:
             status = _status_for(err)
+            if markup and status is Status.TAG_FALLBACK:
+                collapsed = self._collapse(p, decoded)
+                if collapsed is not None:
+                    # Served, never stored: the widget shares these keys and must
+                    # never receive restructured formatting (FR-210).
+                    self.metrics.model_outputs[status.value] += 1
+                    self.metrics.statuses[status] += 1
+                    self.metrics.reasons["formatting_collapsed"] += 1
+                    return SegmentOut(
+                        p.seg_in.id,
+                        collapsed.to_wire(),
+                        status,
+                        p.keys.segment_key,
+                        Origin.MT,
+                        "formatting_collapsed",
+                    )
             self.metrics.model_outputs[status.value] += 1
             # Entities are checked before terms, so an entity failure says
             # nothing about the glossary either way and is left out of its rate.
@@ -332,6 +388,13 @@ class TranslateService:
             self.metrics.store_failures += 1
             self._enqueue(site, p)
         return self._ok(p, final, Origin.MT)
+
+    def _collapse(self, p: _Prepared, decoded: Segment) -> Segment | None:
+        """FR-123: entities and terms still exact, formatting applied to the whole."""
+        try:
+            return collapse_formatting(self._restore(p, decoded), p.with_terms)
+        except SegmentError:
+            return None  # entities or terms failed too: English, as for the widget
 
     def _record_terms(self, p: _Prepared, output: Segment) -> None:
         """Glossary compliance per term (FR-402): each sent term back exactly once."""
