@@ -29,12 +29,19 @@ _spec.loader.exec_module(serve)
         "/widget/../../../../.env",
         "/g2c/%2E%2E/%2E%2E/.env",
         "/..%2f..%2f.env",
-        "/C:/Windows/win.ini",
     ],
 )
 def test_a_path_leaving_its_folder_is_not_served(path: str) -> None:
     assert serve.resolve(path) == serve.NOWHERE
     assert not serve.NOWHERE.exists()
+
+
+def test_a_drive_letter_never_reaches_outside_the_folders() -> None:
+    """On Windows "/C:/..." would name another drive; on Linux it is a folder name.
+    Either way the file served must lie inside a folder this server serves."""
+    target = serve.resolve("/C:/Windows/win.ini")
+    roots = (serve.HERE, serve.G2C, serve.WIDGET)
+    assert target == serve.NOWHERE or any(target.is_relative_to(r.resolve()) for r in roots)
 
 
 @pytest.mark.parametrize(
