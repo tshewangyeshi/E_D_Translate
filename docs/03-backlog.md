@@ -358,10 +358,10 @@ S7.0 is **pre-pilot**; the rest of E7 is post-pilot.
 **As** a citizen on the pilot portal, **I need** the fee and eligibility text in Dzongkha, **so that** the pilot proves the value on the pages that matter most, even before the reviewer UI exists.
 Requirements: FR-410, FR-411, FR-413, FR-510, FR-620 · [ER-O2]
 - [ ] Named DCDD reviewers and a review timeline are agreed (dependency for sprint 4)
-- [ ] `ops/seed.py export` extracts every Tier 1 segment from the pilot snapshots to XLIFF/spreadsheet, with entity and tag placeholders **locked** (visible, not editable)
+- [x] `ops/seed.py export` extracts every Tier 1 segment from the pilot snapshots to XLIFF/spreadsheet, with entity and tag placeholders **locked** (visible, not editable) — *XLIFF 1.2: `<g>`/`<x/>` codes CAT tools lock, each showing its value or glossary term; de-duplicated across pages, each unit listing its pages; already-approved text left out*
 - [ ] Reviewers translate and approve offline
-- [ ] `ops/seed.py import` validates each row's placeholder multiset and order and rejects invalid rows with a reason; valid rows become `translation_version` (`origin = human`) + `review_item = approved`, each with an audit event
-- [ ] Before launch, a report lists Tier 1 coverage per pilot page (approved / still English)
+- [x] `ops/seed.py import` validates each row's placeholder multiset and order and rejects invalid rows with a reason; valid rows become `translation_version` (`origin = human`) + `review_item = approved`, each with an audit event — *also refuses rows whose English changed since export, invented numbers or addresses, no Dzongkha, a DTD; `--dry-run`; the audit event is `seed.import` with a batch id (`tests/orchestrator/test_seed.py`, mutation-checked; run end to end on PostgreSQL)*
+- [x] Before launch, a report lists Tier 1 coverage per pilot page (approved / still English) — *`python -m orchestrator.ops.seed coverage --site portal segments.json`*
 
 ### S7.1 — Reviewer interface
 Requirements: FR-420, FR-421

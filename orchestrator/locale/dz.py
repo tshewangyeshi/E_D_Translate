@@ -44,6 +44,11 @@ def strip_render_artefacts(text: str) -> str:
     return "".join(ch for ch in text if ch not in RENDER_ARTEFACTS)
 
 
+def has_dzongkha(text: str) -> bool:
+    """True when the text carries Tibetan letters, not only digits or marks."""
+    return any("\u0f40" <= ch <= "\u0f6c" for ch in text)
+
+
 def is_tibetan_digit(ch: str) -> bool:
     return len(ch) == 1 and ch in TIBETAN_DIGITS
 
