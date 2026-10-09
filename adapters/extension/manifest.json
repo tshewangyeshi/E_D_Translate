@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "dzweb demo: Dzongkha for the G2C portal",
+  "version": "0.1.0",
+  "description": "Developer-mode demo of the dzweb widget on g2c.tech.gov.bt, using a dzweb API on this computer.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAybLdg34LPKDTaer0Ki/9Sx2TsC+5WSWb5ug3BlFN7rs9cmzUauPMvGIvtmntsGaeSu5tSHR7Keh31uLktG0JYMz4o6rwLD4UA+2Yzmps9KQbvsf1pAJAxMXzZDlinfuiY5aNyutDFm8vO0/DfhQDHAIXQb6DQrE1GaLbwLn3GtHFjcWNrDw/PlPDF6Z34N7i3akK0GYVB5jYhVU2UfdFMg8V+MaIpGnzqXQrMnjoPI9/YuFnk8m0A9Et2iHEUeW7EE69XFTqce9QOUBj3E56C5sEqBFiHxdi+bEJK6DM431ngPmPlgOIpa/wMZpAAEnXsnurWZ71UoawSeYxRoZwxQIDAQAB",
+  "permissions": [
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "origin",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://g2c.tech.gov.bt/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "widget/*.js",
+        "widget/fonts/*"
+      ],
+      "matches": [
+        "https://g2c.tech.gov.bt/*"
+      ]
+    }
+  ]
+}

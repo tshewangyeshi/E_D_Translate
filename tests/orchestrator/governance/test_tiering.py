@@ -117,6 +117,29 @@ class TestSiteConfigLoading:
         with pytest.raises(SiteConfigError):
             SiteRegistry.load(self.write(tmp_path, self.valid(path_rules=rules)))
 
+    @pytest.mark.parametrize(
+        "origin",
+        ["https://g2c.tech.gov.bt", "http://127.0.0.1:8080", "chrome-extension://" + "a" * 32],
+    )
+    def test_fr601_web_and_extension_origins_load(self, tmp_path: Path, origin: str) -> None:
+        p = self.write(tmp_path, self.valid(origins=[origin]))
+        assert SiteRegistry.load(p).allows("portal", origin) is not None
+
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "ftp://g2c.tech.gov.bt",
+            "https://",
+            "https://g2c.tech.gov.bt/path",
+            "chrome-extension://short",
+            "chrome-extension://" + "z" * 32,  # not a Chrome extension id
+            "moz-extension://" + "a" * 32,
+        ],
+    )
+    def test_fr601_an_unusable_origin_is_refused_at_load(self, tmp_path: Path, origin: str) -> None:
+        with pytest.raises(SiteConfigError):
+            SiteRegistry.load(self.write(tmp_path, self.valid(origins=[origin])))
+
 
 class TestSiteIds:
     """A site id appears in requests, logs and the audit trail, so it must fit all three."""
