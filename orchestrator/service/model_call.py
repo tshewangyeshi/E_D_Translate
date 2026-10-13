@@ -30,6 +30,13 @@ the whole paragraph had to stay English. A sentence ends at ``.``, ``!`` or
 ``?`` before a capital letter, but not after an abbreviation (``Nu.``,
 ``e.g.``) or an initial; a list number ("1.") stays with its sentence.
 
+A sentence longer than ``MAX_WORDS`` is sent in clauses. The GovTech model
+leaves out part of a long input, and the checks then keep the whole block
+English; the pilot portal has 131 sentences over 40 words, the longest 162
+(measured 2026-10-13). The cut goes where the sentence already pauses -- after
+``;`` or ``:``, else after a comma, else at a space -- nearest the middle, and
+again until every clause fits. Like pieces, clauses keep the English order.
+
 Raises UpstreamError when a call fails and SegmentError when an answer cannot
 be decoded; the caller treats both exactly as it treated a single call.
 """
@@ -72,6 +79,12 @@ _SENTENCE_END = re.compile(
     r"[.!?][\"'’”)\]]*(\s+)(?=[\"'‘“(\[]?[A-Z]|\d{1,2}[.)]\s)|(?<=[a-z)])\.(?=[A-Z][a-z])"
 )
 _WORD_BEFORE = re.compile(r"(\w+)$")
+#: Longest sentence sent in one call; longer ones go in clauses.
+MAX_WORDS = 40
+_WORD = re.compile(r"\w+")
+#: Where a long sentence may be cut, strongest pause first: the punctuation stays
+#: with the clause before it, the space after it becomes the gap.
+_PAUSES = (re.compile(r"[;:；：](\s+)"), re.compile(r"[,，](\s+)"), re.compile(r"\S(\s+)"))
 #: Words a full stop follows without ending the sentence.
 _ABBREVIATIONS = frozenset(
     "nu no nos mr mrs ms dr st sr jr vs etc eg ie govt dept ltd co inc approx fig ref "
@@ -123,7 +136,7 @@ async def _piece(translator: Translator, fmt: ModelFormat, piece: Piece) -> Segm
     lead, core, trail = _trim(piece)
     leading, core = _leading_values(core)
     core, values = _label_values(core)
-    sentences = split_sentences(core)
+    sentences = _clauses(core)
     translated = await asyncio.gather(*(_one(translator, fmt, s) for s, _ in sentences))
     body: list[Token] = []
     for (_, gap), sentence in zip(sentences, translated, strict=True):
@@ -133,7 +146,60 @@ async def _piece(translator: Translator, fmt: ModelFormat, piece: Piece) -> Segm
 
 def _sentences(piece: Segment) -> list[tuple[Segment, str]]:
     """The sentences ``_piece`` sends for this piece."""
-    return split_sentences(_label_values(_leading_values(_trim(piece)[1])[1])[0])
+    return _clauses(_label_values(_leading_values(_trim(piece)[1])[1])[0])
+
+
+def _clauses(core: Segment) -> list[tuple[Segment, str]]:
+    """The sentences of ``core``, long ones cut into clauses (``MAX_WORDS``)."""
+    out: list[tuple[Segment, str]] = []
+    for sentence, gap in split_sentences(core):
+        parts = split_long(sentence)
+        out.extend(parts[:-1])
+        out.append((parts[-1][0], parts[-1][1] + gap))
+    return out
+
+
+def word_count(segment: Segment) -> int:
+    """Words as the model sees them: each placeholder counts as one."""
+    return sum(len(_WORD.findall(t.value)) if isinstance(t, Text) else 1 for t in segment.tokens)
+
+
+def split_long(sentence: Segment, limit: int = MAX_WORDS) -> list[tuple[Segment, str]]:
+    """``sentence`` cut into clauses of at most ``limit`` words, each with its gap.
+
+    The cut is made in text only, at the strongest pause available, nearest the
+    middle so both halves are of a size; then each half the same way. A
+    sentence with no place to cut is returned whole.
+    """
+    if word_count(sentence) <= limit:
+        return [(sentence, "")]
+    tokens = sentence.tokens
+    total = word_count(sentence)
+    for pause in _PAUSES:
+        best: tuple[int, int, int, int] | None = None  # (distance, token, gap start, gap end)
+        words = 0
+        for i, token in enumerate(tokens):
+            if not isinstance(token, Text):
+                words += 1
+                continue
+            for m in pause.finditer(token.value):
+                before = words + len(_WORD.findall(token.value[: m.start(1)]))
+                if not 0 < before < total:
+                    continue  # nothing would be left on one side
+                distance = abs(total - 2 * before)
+                if best is None or distance < best[0]:
+                    best = (distance, i, m.start(1), m.end(1))
+            words += len(_WORD.findall(token.value))
+        if best is not None:
+            _, i, gap_start, gap_end = best
+            value = tokens[i].value  # type: ignore[union-attr]
+            left = Segment(tuple(_merge_text([*tokens[:i], Text(value[:gap_start])])))
+            right = Segment(tuple(_merge_text([Text(value[gap_end:]), *tokens[i + 1 :]])))
+            if has_words(left) and has_words(right):
+                head = split_long(left, limit)
+                head[-1] = (head[-1][0], value[gap_start:gap_end])
+                return [*head, *split_long(right, limit)]
+    return [(sentence, "")]
 
 
 def split_sentences(core: Segment) -> list[tuple[Segment, str]]:
