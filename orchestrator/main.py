@@ -23,4 +23,5 @@ def create() -> FastAPI:
         health=c.health,
         gauges=c.gauges,
         ops_token=c.settings.ops_token or None,
+        trusted_proxies=c.settings.trusted_proxies,
     )

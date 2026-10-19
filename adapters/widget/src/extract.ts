@@ -15,6 +15,14 @@
 //
 // Nested inlines collapse into their outermost pair (spec §2.3 default):
 // all text nodes under <a> form one slot.
+//
+// The walk can pause (ER-20). On a long page one synchronous pass held the main
+// thread for ~68 ms of a 73-93 ms task (CPU 6x), and a tap in that window does
+// nothing. `extractInSlices` hands the thread back between slices of about
+// SLICE_MS. It pauses only at block boundaries -- before descending into a
+// child block, and between elements of the attribute pass -- never inside a
+// block, so a block's markers and slots are always read in one go and the
+// output is exactly what `extract` gives for the same DOM.
 
 export type Tier = 1 | 2 | 3;
 
@@ -32,6 +40,12 @@ export interface Segment {
   text: string;
   /** Text nodes per slot, in document order. An empty array is a slot-less position. */
   slots: Text[][];
+  /**
+   * Each slot's text when `text` was encoded. The page may change before the
+   * request is sent (extraction pauses, ER-20); answers are checked against
+   * this, the text actually sent, never a later reading (FR-217).
+   */
+  read: string[];
   /** data-dz-tier of the nearest ancestor, if it is 1, 2 or 3 (a hint only, FR-512). */
   tierHint: Tier | null;
   /** 1 when the block sits inside a configured Tier 1 selector. */
@@ -156,7 +170,8 @@ class Extractor {
     }
   }
 
-  processBlock(block: Element): void {
+  /** Segments of `block`, innermost blocks first-come; yields where a pause is safe. */
+  *walk(block: Element): Generator<void, void, undefined> {
     let enc = new Encoder();
     const flush = (): void => {
       const seg = enc.finish(block, this.tierHintOf(block), this.selectorTierOf(block));
@@ -191,7 +206,8 @@ class Extractor {
         enc.addInline(nodes);
       } else {
         flush();
-        this.processBlock(el); // innermost block wins
+        yield; // a block boundary: nothing is half-encoded here
+        yield* this.walk(el); // innermost block wins
       }
     }
     flush();
@@ -240,9 +256,9 @@ class Encoder {
   }
 
   finish(block: Element, tierHint: Tier | null, selectorTier: 1 | null): Segment | null {
-    const raw = this.slots.map((s) => s.map((n) => n.nodeValue ?? "").join("")).join("");
-    if (!LETTER.test(raw)) return null; // whitespace, punctuation or digits only (FR-112)
-    return { block, text: this.parts.join(""), slots: this.slots, tierHint, selectorTier };
+    const read = this.slots.map((s) => s.map((n) => n.nodeValue ?? "").join(""));
+    if (!LETTER.test(read.join(""))) return null; // whitespace, punctuation or digits only (FR-112)
+    return { block, text: this.parts.join(""), slots: this.slots, read, tierHint, selectorTier };
   }
 
   private lastSlot(): Text[] {
@@ -250,8 +266,14 @@ class Encoder {
   }
 }
 
-function extractAttributes(root: Element, ex: Extractor): AttributeUnit[] {
-  const units: AttributeUnit[] = [];
+/** Elements the attribute pass looks at between pauses. */
+const ATTRIBUTE_STRIDE = 64;
+
+function* extractAttributes(
+  root: Element,
+  ex: Extractor,
+  units: AttributeUnit[],
+): Generator<void, void, undefined> {
   const consider = (el: Element): void => {
     if (ex.isExcludedDeep(el, root)) return;
     for (const attr of TRANSLATABLE_ATTRS) {
@@ -267,15 +289,60 @@ function extractAttributes(root: Element, ex: Extractor): AttributeUnit[] {
     }
   };
   consider(root);
-  for (const el of Array.from(root.querySelectorAll("*"))) consider(el);
-  return units;
+  const all = Array.from(root.querySelectorAll("*"));
+  for (let n = 0; n < all.length; n++) {
+    if (n > 0 && n % ATTRIBUTE_STRIDE === 0) yield;
+    consider(all[n] as Element);
+  }
+}
+
+function* extraction(
+  root: Element,
+  options: ExtractOptions,
+  out: { result?: Extraction },
+): Generator<void, void, undefined> {
+  const ex = new Extractor(options);
+  if (!ex.isExcludedDeep(root, root)) yield* ex.walk(root);
+  const attributes: AttributeUnit[] = [];
+  yield* extractAttributes(root, ex, attributes);
+  out.result = { segments: ex.result(), attributes };
 }
 
 /** Extract translatable segments and attribute units under `root`, in document order. */
 export function extract(root: Element, options: ExtractOptions = {}): Extraction {
-  const ex = new Extractor(options);
-  if (!ex.isExcludedDeep(root, root)) ex.processBlock(root);
-  return { segments: ex.result(), attributes: extractAttributes(root, ex) };
+  const out: { result?: Extraction } = {};
+  for (const _ of extraction(root, options, out)) {
+    /* run straight through */
+  }
+  return out.result as Extraction;
+}
+
+/** Longest stretch of extraction before the main thread is handed back (ER-20: 50 ms). */
+export const SLICE_MS = 8;
+
+/**
+ * `extract`, in slices: after about `sliceMs` of work, at the next block
+ * boundary, `pause()` is awaited so the browser can handle input and paint.
+ * The DOM can change during a pause. Each segment keeps the text it was
+ * encoded from (`read`), so an answer for a block the host changed in the
+ * meantime fails the stale-response check and is not written (FR-217).
+ */
+export async function extractInSlices(
+  root: Element,
+  options: ExtractOptions,
+  pause: () => Promise<void>,
+  sliceMs = SLICE_MS,
+  now: () => number = () => performance.now(),
+): Promise<Extraction> {
+  const out: { result?: Extraction } = {};
+  let started = now();
+  for (const _ of extraction(root, options, out)) {
+    if (now() - started >= sliceMs) {
+      await pause();
+      started = now();
+    }
+  }
+  return out.result as Extraction;
 }
 
 /** Current text of each slot, concatenating adjacent text nodes. */

@@ -403,3 +403,77 @@ def test_fr140_content_at_the_start_is_still_sent(text: str) -> None:
     model = Recorder(lambda t: f"DZ {t}")
     run(translate_segment(model, XML, seg))
     assert "<e1/>" in model.sent[0]  # the year or the address went with its sentence
+
+
+# --- long sentences go in clauses (pilot portal: 131 sentences over 40 words) ---
+
+
+def _clauses_of(text: str, limit: int) -> list[tuple[str, str]]:
+    from orchestrator.service.model_call import split_long
+
+    return [(s.to_wire(), gap) for s, gap in split_long(parse(text), limit)]
+
+
+def test_fr122_a_sentence_within_the_limit_is_left_whole() -> None:
+    assert _clauses_of("Apply online, then pay the fee.", 6) == [
+        ("Apply online, then pay the fee.", "")
+    ]
+
+
+def test_fr122_a_long_sentence_is_cut_at_the_strongest_pause() -> None:
+    # A semicolon beats the commas, even though a comma is nearer the middle.
+    text = "Bring the form, two photos, and the fee; the officer checks them."
+    assert _clauses_of(text, 8) == [
+        ("Bring the form, two photos, and the fee;", " "),
+        ("the officer checks them.", ""),
+    ]
+
+
+def test_fr122_among_equal_pauses_the_cut_nearest_the_middle_wins() -> None:
+    text = "Fill in the form, attach a recent photo, sign it, and pay the fee."
+    assert _clauses_of(text, 8) == [
+        ("Fill in the form, attach a recent photo,", " "),
+        ("sign it, and pay the fee.", ""),
+    ]
+
+
+def test_fr122_cuts_repeat_until_every_clause_fits() -> None:
+    text = "one two three, four five six, seven eight nine, ten eleven twelve."
+    clauses = _clauses_of(text, 3)
+    assert [c for c, _ in clauses] == [
+        "one two three,",
+        "four five six,",
+        "seven eight nine,",
+        "ten eleven twelve.",
+    ]
+    assert "".join(c + gap for c, gap in clauses) == text
+
+
+def test_fr122_with_no_punctuation_a_long_sentence_is_cut_at_a_space() -> None:
+    assert _clauses_of("one two three four five six", 3) == [
+        ("one two three", " "),
+        ("four five six", ""),
+    ]
+
+
+def test_fr140_a_cut_never_falls_inside_a_placeholder() -> None:
+    seg = _masked_wire("Pay at https://pay.portal.gov.example/fees/renewal, then keep the receipt.")
+    from orchestrator.service.model_call import split_long
+
+    clauses = split_long(seg, 4)
+    assert len(clauses) == 2
+    kept = [t for s, _ in clauses for t in s.tokens if isinstance(t, Entity)]
+    assert kept == [t for t in seg.tokens if isinstance(t, Entity)]
+
+
+def test_fr122_a_long_sentence_is_sent_in_clauses_and_rejoined_with_its_spacing() -> None:
+    from orchestrator.service.model_call import MAX_WORDS
+
+    first = " ".join(["first"] * (MAX_WORDS - 5)) + ","
+    second = " ".join(["second"] * 10) + "."
+    seg = parse(f"{first} {second} Short one.")
+    model = Recorder()
+    out = run(translate_segment(model, XML, seg))
+    assert sorted(model.sent) == sorted([first, second, "Short one."])
+    assert out.to_wire() == f"DZ[{first}] DZ[{second}] DZ[Short one.]"
+    assert calls_needed(seg) == 3

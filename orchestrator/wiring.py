@@ -35,6 +35,11 @@ DZWEB_DISTINCT_CLIENTS    how many different clients must see Tier 2 text before
                           a local demo with one browser
 DZWEB_OPS_TOKEN           bearer token for /v1/health and /v1/metrics; when unset they
                           answer 404 to everyone (FR-610, FR-611)
+DZWEB_TRUSTED_PROXIES     addresses or networks of the proxies in front of the API
+                          (GovTech's gateway, a local reverse proxy), comma-separated.
+                          X-Forwarded-For is believed only from these (FR-103, NFR-304).
+                          Unset: the direct peer is the client. Behind a proxy that
+                          makes every citizen one client, so set it there
 
 For local work these can live in a .env file in the working directory
 (git-ignored). A variable set in the real environment always wins over .env.
@@ -54,6 +59,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from orchestrator.api.ratelimit import Network, parse_trusted_proxies
 from orchestrator.governance.audit import (
     AuditLog,
     PostgresAuditLog,
@@ -140,6 +146,7 @@ class Settings:
     distinct_clients: int = 3
     pg_pool_size: int = 10
     numbers: str = "model"
+    trusted_proxies: tuple[Network, ...] = ()
     wso2: Wso2Config | None = None
 
     @staticmethod
@@ -169,6 +176,7 @@ class Settings:
             distinct_clients=_positive(env, "DZWEB_DISTINCT_CLIENTS", 3),
             pg_pool_size=_positive(env, "DZWEB_PG_POOL_SIZE", 10),
             numbers=env.get("DZWEB_NUMBERS", "model"),
+            trusted_proxies=_trusted_proxies(env),
             wso2=_wso2(env),
         )
         if settings.numbers not in ("model", "protected"):
@@ -176,6 +184,15 @@ class Settings:
         if settings.model_format not in MODEL_FORMATS:
             raise ConfigError(f"DZWEB_MODEL_FORMAT must be one of {sorted(MODEL_FORMATS)}")
         return settings
+
+
+def _trusted_proxies(env: Mapping[str, str]) -> tuple[Network, ...]:
+    try:
+        return parse_trusted_proxies(env.get("DZWEB_TRUSTED_PROXIES", ""))
+    except ValueError as error:
+        raise ConfigError(
+            f"DZWEB_TRUSTED_PROXIES must be addresses or networks, comma-separated: {error}"
+        ) from None
 
 
 def build_translator(settings: Settings, fmt: ModelFormat) -> Translator:

@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "chrome-extension://akplhnejomokdklicmdjpppindfjcccd" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "|http://127.0.0.1:8000/",
+      "initiatorDomains": ["akplhnejomokdklicmdjpppindfjcccd"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  }
+]

@@ -112,6 +112,7 @@ def make_client(rig: Rig, *, client_host: str = "203.0.113.10", **limits: Any) -
         hasher=limits.get("hasher") or ClientHasher(),
         health=limits.get("health"),
         ops_token=limits.get("ops_token", OPS_TOKEN),
+        trusted_proxies=limits.get("trusted_proxies", ()),
     )
     return TestClient(app, client=(client_host, 50000))
 

@@ -188,6 +188,8 @@
 
 ### Trusted-proxy client addresses
 
+**Done 2026-10-19:** `DZWEB_TRUSTED_PROXIES` (orchestrator/api/ratelimit.py `client_address`, tests in tests/orchestrator/api/test_trusted_proxies.py). Still open: GovTech's gateway address for deploy/vm/dzweb.env.
+
 **What:** Read the client address from `X-Forwarded-For` only when the direct peer is a configured trusted proxy (WSO2 / load balancer).
 
 **Why:** Behind a proxy every citizen shares the proxy's address, which breaks both the N-distinct-clients rule (NFR-304: nothing would ever be translated) and the per-client rate limit (everyone throttled together).
@@ -201,6 +203,8 @@ The 2026-09-28 security audit closed the two limiter defects behind this one (LR
 **Depends on:** WSO2/deployment topology
 
 ### Chunk widget extraction at block boundaries
+
+**Done 2026-10-19:** `extractInSlices` (adapters/widget/src/extract.ts), tests in test/slices.test.ts. Long tasks over 50 ms gone in 7 of 9 runs (two at 55 and 60 ms, source not yet found; before: 84-97 ms every run); the perf guard is now 80 ms. Still open: input latency itself -- the scheduler-delay proxy did not improve (scheduler.yield runs ahead of timers by design), so measure real taps on a low-end Android phone before tightening the 160 ms guard.
 
 **What:** Split `extract()` so a long page is walked in pieces with the main thread handed back between them, instead of one synchronous pass.
 

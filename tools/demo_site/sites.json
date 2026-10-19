@@ -1,11 +1,12 @@
 {
-  "_comment": "Demo only: the whole page is translatable, so nothing is marked Tier 1. Real sites keep their Tier 1 marking (FR-510); see the repository sites.json.",
+  "_comment": "Demo only: the whole page is translatable, so nothing is marked Tier 1. Real sites keep their Tier 1 marking (FR-510); see the repository sites.json. The chrome-extension origin is the developer-mode demo extension (adapters/extension), whose ID is fixed by its manifest key.",
   "sites": [
     {
       "site_id": "portal",
       "origins": [
         "http://localhost:8080",
-        "http://127.0.0.1:8080"
+        "http://127.0.0.1:8080",
+        "chrome-extension://akplhnejomokdklicmdjpppindfjcccd"
       ],
       "default_tier": 2,
       "private_selectors": [

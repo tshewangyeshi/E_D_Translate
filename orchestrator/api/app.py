@@ -35,7 +35,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from orchestrator.api.ratelimit import RateLimiter, SharedRateLimiter, client_bucket
+from orchestrator.api.ratelimit import (
+    Network,
+    RateLimiter,
+    SharedRateLimiter,
+    client_address,
+    client_bucket,
+)
 from orchestrator.governance.paths import redact_path
 from orchestrator.governance.sites import SiteRegistry
 from orchestrator.ops import health as health_checks
@@ -226,6 +232,7 @@ def create_app(
     health: Mapping[str, health_checks.Probe] | None = None,
     gauges: ops_metrics.Gauges | None = None,
     ops_token: str | None = None,
+    trusted_proxies: tuple[Network, ...] = (),
 ) -> FastAPI:
     app = FastAPI(title="dzweb orchestrator", version="0.1", docs_url=None, redoc_url=None)
     origin_limiter = origin_limiter or ORIGIN_LIMIT.local()
@@ -244,6 +251,12 @@ def create_app(
     gauge_reader = ops_metrics.GaugeReader(
         gauges if gauges is not None else ops_metrics.service_gauges(service)
     )
+
+    def client_of(request: Request) -> str:
+        """The client's rate-limiting bucket, read through trusted proxies only."""
+        peer = request.client.host if request.client else "unknown"
+        forwarded = request.headers.getlist("x-forwarded-for")
+        return client_bucket(client_address(peer, forwarded, trusted_proxies))
 
     def operator(request: Request) -> bool:
         if not ops_token:
@@ -370,7 +383,7 @@ def create_app(
 
         if body.website:
             return dropped("honeypot")
-        client = client_bucket(request.client.host if request.client else "unknown")
+        client = client_of(request)
         # Keyed on the address bucket, like the translate limiter, and held in
         # memory only: never written down (NFR-303).
         if not origin_limiter.allow(origin) or not feedback_limiter.allow(f"{origin}|{client}"):
@@ -429,7 +442,7 @@ def create_app(
         # One IPv6 allocation is one client, for both the rate limit and the
         # distinct-client gate below: otherwise a new address buys a fresh burst
         # and counts as another citizen who has seen the text (NFR-304).
-        client = client_bucket(request.client.host if request.client else "unknown")
+        client = client_of(request)
         if not origin_limiter.allow(origin) or not client_limiter.allow(f"{origin}|{client}"):
             return _error(
                 429,

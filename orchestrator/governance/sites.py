@@ -22,6 +22,9 @@ class SiteConfigError(ValueError):
 #: A site id names the site in requests, logs and the audit trail (FR-620), so
 #: it is refused at load if it could not appear in all three.
 _SITE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+#: A web origin, or a browser extension's (Chrome IDs are 32 letters a-p).
+#: The extension form exists for the developer-mode demo (adapters/extension).
+_ORIGIN = re.compile(r"https?://[^/\s]+|chrome-extension://[a-p]{32}")
 
 
 @dataclass(frozen=True)
@@ -75,8 +78,10 @@ class SiteRegistry:
             if tier not in (1, 2, 3) or isinstance(tier, bool):
                 raise SiteConfigError(f"{raw.get('site_id')}: default_tier must be 1, 2 or 3")
             origins = frozenset(o.rstrip("/") for o in raw["origins"])
-            if not origins or not all(o.startswith(("https://", "http://")) for o in origins):
-                raise SiteConfigError(f"{raw['site_id']}: origins must be http(s) URLs")
+            if not origins or not all(_ORIGIN.fullmatch(o) for o in origins):
+                raise SiteConfigError(
+                    f"{raw['site_id']}: origins must be http(s) or chrome-extension origins"
+                )
             sites.append(
                 Site(
                     site_id=raw["site_id"],
