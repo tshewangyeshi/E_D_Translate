@@ -19,8 +19,11 @@ Two properties matter beyond the arithmetic, both found by the 2026-09-28 audit:
   subscriber, so this groups what is in practice one customer.
 
 Neither property helps while every request arrives from a reverse proxy and
-therefore shares one address. That is the separate trusted-proxy work in
-TODOS.md, which decides what the client key means before any of this applies.
+therefore shares one address. ``client_address`` decides who the client is
+first: behind a configured trusted proxy (DZWEB_TRUSTED_PROXIES), the address
+that proxy reports in ``X-Forwarded-For``; otherwise the direct peer. Only
+trusted hops are believed, so a client cannot choose its own bucket by
+sending the header itself.
 """
 
 from __future__ import annotations
@@ -37,6 +40,48 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 IPV6_BUCKET_PREFIX = 64
+
+Network = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+def parse_trusted_proxies(spec: str) -> tuple[Network, ...]:
+    """``"10.0.0.5, 172.30.0.0/16"`` as networks; ValueError on anything else."""
+    return tuple(
+        ipaddress.ip_network(item.strip(), strict=False) for item in spec.split(",") if item.strip()
+    )
+
+
+def _address(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    try:
+        return ipaddress.ip_address(value.strip())
+    except ValueError:
+        return None
+
+
+def client_address(peer: str, forwarded_for: list[str], trusted: tuple[Network, ...]) -> str:
+    """Who sent the request: the right-most address not on a trusted proxy.
+
+    ``forwarded_for`` holds every ``X-Forwarded-For`` header in order. Each
+    proxy appends the address that connected to it, so the chain is read from
+    the right, through trusted hops only, and the first address not trusted is
+    the client. Anything left of it was written by the client and is ignored.
+    An unreadable entry where an address should be means the chain cannot be
+    believed: the last trusted hop is taken instead, so a forged header can
+    never give a caller a bucket of its own choosing.
+    """
+    hop = _address(peer)
+    if not trusted or hop is None or not any(hop in net for net in trusted):
+        return peer
+    chain = [part for header in forwarded_for for part in header.split(",")]
+    last = str(hop)
+    for entry in reversed(chain):
+        address = _address(entry)
+        if address is None:
+            return last
+        if not any(address in net for net in trusted):
+            return str(address)
+        last = str(address)
+    return last
 
 
 def client_bucket(host: str) -> str:

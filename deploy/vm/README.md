@@ -13,6 +13,7 @@ other teams: everything here listens on localhost only.
 | Worker | `dzweb-worker.service`, memory limit 250 MB |
 | PostgreSQL | database and role `dzweb`, localhost, password |
 | Redis | localhost, password, 64 MB, translations evicted first |
+| Backups | `dzweb-backup.timer`, nightly 02:30, `~/dzweb-backups`, 14 days (`deploy/vm/backup.sh`) |
 
 ## First setup (done 2026-10-07)
 
@@ -35,6 +36,18 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/v1/metrics   # c
 journalctl -u dzweb-api -u dzweb-worker --since "1 hour ago"                 # logs (sudo may be needed)
 ```
 
+Backups:
+
+```bash
+systemctl list-timers dzweb-backup.timer              # when the next one runs
+systemctl status dzweb-backup --no-pager              # did the last one work?
+ls -lh ~/dzweb-backups                                # what is kept
+sudo systemctl start dzweb-backup                     # one now (e.g. before an upgrade)
+```
+
+Restoring is in the header of `deploy/vm/backup.sh`. The copies are on the
+same VM: they undo a bad migration or a deleted row, not the loss of the VM.
+
 Update to the latest code:
 
 ```bash
@@ -46,6 +59,10 @@ sudo systemctl restart dzweb-api dzweb-worker      # migrations run at API start
 
 - **Citizens cannot reach it.** GovTech's gateway must publish `127.0.0.1:8000`
   over HTTPS (backlog S2.3); then the widget's `data-dz-api` points there.
+- **Set `DZWEB_TRUSTED_PROXIES`** in `deploy/vm/dzweb.env` to the gateway's
+  address when it publishes the API (ask GovTech which address it connects
+  from). Without it every citizen is one client: nothing reaches three distinct
+  clients, so nothing is translated, and one reader's rate limit is everyone's.
 - **Tier 1 rules are provisional** (`deploy/vm/sites.json`): the product owner
   confirms which portal pages and elements carry fees and legal text.
 - **The nightly gate** (`tools/nightly_gate.py`) needs the frozen evaluation

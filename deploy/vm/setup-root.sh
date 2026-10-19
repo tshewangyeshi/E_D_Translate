@@ -104,11 +104,41 @@ WantedBy=multi-user.target
 EOF
 }
 unit dzweb-api "dzweb translation API (127.0.0.1:8000)" \
-  "$APP_DIR/.venv/bin/uvicorn orchestrator.main:create --factory --host 127.0.0.1 --port 8000 --workers 1" 350M
+  "$APP_DIR/.venv/bin/uvicorn orchestrator.main:create --factory --host 127.0.0.1 --port 8000 --workers 1 --no-proxy-headers" 350M
 unit dzweb-worker "dzweb background translation worker" \
   "$APP_DIR/.venv/bin/python -m orchestrator.queue.run_worker" 250M
+
+echo "== nightly database backup: dzweb-backup.timer (deploy/vm/backup.sh)"
+cat > /etc/systemd/system/dzweb-backup.service <<EOF
+[Unit]
+Description=dzweb database backup to ~/dzweb-backups
+After=postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=$APP_USER
+Group=$APP_USER
+EnvironmentFile=$INFRA
+ExecStart=/usr/bin/bash $APP_DIR/deploy/vm/backup.sh
+NoNewPrivileges=yes
+PrivateTmp=yes
+EOF
+cat > /etc/systemd/system/dzweb-backup.timer <<EOF
+[Unit]
+Description=dzweb database backup, nightly
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
 systemctl daemon-reload
-systemctl enable --now dzweb-api dzweb-worker
+systemctl enable --now dzweb-api dzweb-worker dzweb-backup.timer
 sleep 3
 systemctl --no-pager --lines=0 status dzweb-api dzweb-worker | grep -E "Active:|Loaded:"
 echo "== done. Check: curl -s -H \"Authorization: Bearer \$(grep ^DZWEB_OPS_TOKEN ~/dzweb/.env | cut -d= -f2)\" http://127.0.0.1:8000/v1/health"

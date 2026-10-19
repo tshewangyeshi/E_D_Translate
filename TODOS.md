@@ -188,6 +188,8 @@
 
 ### Trusted-proxy client addresses
 
+**Done 2026-10-19:** `DZWEB_TRUSTED_PROXIES` (orchestrator/api/ratelimit.py `client_address`, tests in tests/orchestrator/api/test_trusted_proxies.py). Still open: GovTech's gateway address for deploy/vm/dzweb.env.
+
 **What:** Read the client address from `X-Forwarded-For` only when the direct peer is a configured trusted proxy (WSO2 / load balancer).
 
 **Why:** Behind a proxy every citizen shares the proxy's address, which breaks both the N-distinct-clients rule (NFR-304: nothing would ever be translated) and the per-client rate limit (everyone throttled together).
