@@ -204,6 +204,8 @@ The 2026-09-28 security audit closed the two limiter defects behind this one (LR
 
 ### Chunk widget extraction at block boundaries
 
+**Done 2026-10-19:** `extractInSlices` (adapters/widget/src/extract.ts), tests in test/slices.test.ts. Long tasks over 50 ms gone in 7 of 9 runs (two at 55 and 60 ms, source not yet found; before: 84-97 ms every run); the perf guard is now 80 ms. Still open: input latency itself -- the scheduler-delay proxy did not improve (scheduler.yield runs ahead of timers by design), so measure real taps on a low-end Android phone before tightening the 160 ms guard.
+
 **What:** Split `extract()` so a long page is walked in pieces with the main thread handed back between them, instead of one synchronous pass.
 
 **Why:** ER-20 budgets no widget long task over 50 ms. Measured on a 600-block page with the CPU throttled 6x, the worst task is ~77-93 ms and a single `extract()` over the whole page accounts for ~68 ms of it. Yielding between writes cannot help: the cost is paid before the first write. On the low-end Android hardware this service targets, that window is felt as a dead tap.

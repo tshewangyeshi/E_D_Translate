@@ -30,7 +30,12 @@ import {
   type BlockState,
   type Registry,
 } from "./apply.js";
-import { extract, type AttributeUnit, type Extraction, type Segment } from "./extract.js";
+import {
+  extractInSlices,
+  type AttributeUnit,
+  type Extraction,
+  type Segment,
+} from "./extract.js";
 import { stripRenderArtefacts } from "./locale-dz.js";
 import {
   WRITTEN,
@@ -302,7 +307,10 @@ export class Widget {
   }
 
   private async pass(epoch: number, retry = false, roots?: readonly Element[]): Promise<void> {
-    const extracted = this.extractUnits(roots);
+    const extracted = await this.extractUnits(roots);
+    // Extraction pauses for the browser (ER-20): the reader may have switched
+    // back in the meantime, and then there is nothing to send.
+    if (this.epoch !== epoch || this.showing !== "dz") return;
     const attributes = extracted.attributes;
     // Only a full-page pass defers: a targeted one was asked for explicitly.
     const { now, later } =
@@ -333,7 +341,7 @@ export class Widget {
       const family = typed ? originalFamily(segment.block) : null;
       sent.set(id, {
         segment,
-        slots: readSlots(segment),
+        slots: segment.read, // what was sent, not what the page holds now (FR-217)
         generation: state.generation,
         base,
         family,
@@ -564,21 +572,24 @@ export class Widget {
    * A translated block carries `lang="dz…"` and extraction skips those by
    * design (FR-112), so a block being re-examined has its marker cleared first.
    * Otherwise a host edit inside translated content would be invisible.
+   *
+   * In slices, handing the main thread back between them (ER-20).
    */
-  private extractUnits(roots?: readonly Element[]): Extraction {
+  private async extractUnits(roots?: readonly Element[]): Promise<Extraction> {
     const options = {
       tier1Selectors: this.config?.tier1Selectors ?? [],
       privateSelectors: this.config?.privateSelectors ?? [],
     };
+    const pause = (): Promise<void> => yieldToBrowser(this.window());
     try {
-      if (roots === undefined) return extract(this.root(), options);
+      if (roots === undefined) return await extractInSlices(this.root(), options, pause);
       const segments: Segment[] = [];
       const attributes: AttributeUnit[] = [];
       for (const block of roots) {
         if (!block.isConnected) continue; // removed while we were debouncing
         clearLanguage(block);
         clearWritten(block);
-        const found = extract(block, options);
+        const found = await extractInSlices(block, options, pause);
         segments.push(...found.segments);
         attributes.push(...found.attributes);
       }

@@ -102,20 +102,29 @@ test("er20_translating_a_long_page_does_not_block_the_main_thread", async ({ pag
     0,
   );
 
-  // THE ER-20 TARGETS ARE NOT MET YET, and these assertions are deliberately
-  // set where the widget actually is rather than where it should be, so the
-  // suite guards against regression without pretending the budget is passed.
+  // Extraction now runs in slices of ~8 ms (extract.ts `extractInSlices`).
+  // Measured 2026-10-19, six runs each, CPU 6x, on a loaded laptop:
   //
-  //   target   ER-20: no long task > 50 ms, input latency p95 < 100 ms
-  //   measured long task max ~93 ms, scheduler delay p95 ~105 ms (CPU 6x)
+  //               long task max                scheduler delay p95
+  //   before      84-97 ms, every run          76-176 ms, median ~91
+  //   after       none in 7 of 9; 55, 60 ms    85-134 ms, median ~106
   //
-  // The cause is measured, not guessed: a single `extract()` over the whole
-  // page accounts for ~68 ms of the worst task. Yielding between writes cannot
-  // help, because the cost is paid before the first write. Fixing it means
-  // chunking extraction at block boundaries, which is a change to extract.ts
-  // and is tracked in TODOS.md. Tighten these numbers when that lands.
+  //   target      ER-20: no long task > 50 ms, input latency p95 < 100 ms
+  //
+  // Extraction's long task is gone. An occasional task of 55-60 ms remains,
+  // from elsewhere; 80 ms stays clear of it and still fails if extraction
+  // stops slicing (the old widget never measured under 84).
+  //
+  // The scheduler figure is a proxy and it did NOT improve: the slices yield
+  // with scheduler.yield, whose continuations run ahead of ordinary timers by
+  // design, and the probe is an ordinary timer. Input is served ahead of those
+  // continuations, so a reader's tap should not wait the same way -- but that
+  // is not yet measured here. Sending real presses through Playwright did not
+  // settle it: under 6x throttling only ~12 land in three seconds, and each
+  // forces a layout that adds long tasks of its own, old widget and new alike.
+  // The 160 ms guard stays until input latency is measured on a real phone.
   expect(result.longTasks.max, "longest main-thread task (ER-20 target: 50ms)").toBeLessThanOrEqual(
-    130,
+    80,
   );
   expect(
     result.schedulerDelayP95,
