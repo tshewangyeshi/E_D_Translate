@@ -4,6 +4,7 @@
     {
       "site_id": "g2c",
       "origins": [
+        "https://citizenservices.gov.bt",
         "https://g2c.tech.gov.bt",
         "https://www.citizenservices.gov.bt"
       ],

@@ -44,7 +44,13 @@ def test_the_header_rule_sets_the_extension_origin_on_api_calls_only() -> None:
 def test_the_extension_reaches_only_the_local_api_and_runs_only_on_the_portal() -> None:
     manifest = json.loads((EXTENSION / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["host_permissions"] == ["http://127.0.0.1:8000/*"]
-    assert [c["matches"] for c in manifest["content_scripts"]] == [["https://g2c.tech.gov.bt/*"]]
+    portal = [
+        "https://citizenservices.gov.bt/*",
+        "https://www.citizenservices.gov.bt/*",
+        "https://g2c.tech.gov.bt/*",
+    ]
+    assert [c["matches"] for c in manifest["content_scripts"]] == [portal]
+    assert [w["matches"] for w in manifest["web_accessible_resources"]] == [portal]
     assert 'const API = "http://127.0.0.1:8000/"' in (EXTENSION / "background.js").read_text(
         encoding="utf-8"
     )

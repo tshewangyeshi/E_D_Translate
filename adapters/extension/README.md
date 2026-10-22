@@ -1,6 +1,6 @@
 # dzweb demo extension (developer mode)
 
-Shows the real widget on the real G2C portal (`https://g2c.tech.gov.bt`) before
+Shows the real widget on the real G2C portal (`https://citizenservices.gov.bt/g2cportal`) before
 GovTech adds the script tag. The extension runs only on that site, carries the
 widget build and the Dzongkha font, and sends the widget's requests to the
 dzweb API on this computer (`http://127.0.0.1:8000`) — nothing else. The page
@@ -34,9 +34,14 @@ python -m uvicorn orchestrator.main:create --factory --host 127.0.0.1 --port 800
 python -m orchestrator.queue.run_worker                                             # terminal 2 (same settings)
 ```
 
-Open `https://g2c.tech.gov.bt/g2cportal`. A **རྫོང་ཁ** button appears bottom right;
+Open `https://citizenservices.gov.bt/g2cportal`. A **རྫོང་ཁ** button appears bottom right;
 click it to switch, **English** to switch back. No button means the API is not
 running.
+
+Use that address, not `g2c.tech.gov.bt`: from inside GovNet the latter is a
+public page whose images and data come from a GovNet-internal address, which
+Chrome blocks, and the portal's data service refuses it as an origin (403).
+Measured 2026-10-22.
 
 ## How it works
 
