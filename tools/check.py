@@ -93,14 +93,15 @@ INTEGRATION_PORTS = {"PostgreSQL": 55432, "Redis": 56379}  # docker-compose.yml
 
 # Playwright keeps its browsers outside the repo; without them the browser
 # fixtures cannot run and say so rather than being silently skipped.
-BROWSERS = Path.home() / "AppData" / "Local" / "ms-playwright"
+BROWSER_DIRS = [
+    Path.home() / "AppData" / "Local" / "ms-playwright",  # Windows
+    Path.home() / "Library" / "Caches" / "ms-playwright",  # macOS
+    Path.home() / ".cache" / "ms-playwright",  # Linux
+]
 
 
 def browsers_available(engine: str = "chromium") -> bool:
-    if BROWSERS.is_dir() and any(BROWSERS.glob(f"{engine}*")):
-        return True
-    cache = Path.home() / ".cache" / "ms-playwright"  # Linux/macOS
-    return cache.is_dir() and any(cache.glob(f"{engine}*"))
+    return any(d.is_dir() and any(d.glob(f"{engine}*")) for d in BROWSER_DIRS)
 
 
 def other_engines_available() -> bool:

@@ -15,8 +15,9 @@ Two classes of check, because they are not equally portable:
 * **Environment** -- pins against what is actually installed. This is the check
   that catches "I upgraded a package and forgot to regenerate", but it is
   specific to one interpreter on one platform: a fresh install resolving
-  `fastapi>=0.115` may legitimately land elsewhere, and `colorama` is a Windows
-  dependency. Fatal on a development machine, reported without failing under
+  `fastapi>=0.115` may legitimately land elsewhere. Only this platform's
+  dependency closure is compared, so a Windows-only pin (`colorama`) does not
+  fail a Mac. Fatal on a development machine, reported without failing under
   ``CI``, where the environment is built from the ranges rather than the pins.
 """
 
@@ -36,8 +37,9 @@ PYPROJECT = ROOT / "pyproject.toml"
 
 PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;#]+)$")
 REGENERATE = (
-    "regenerate with: .venv/Scripts/python -m pip freeze --exclude-editable "
-    "| sort > requirements.txt   (then restore the header)"
+    "regenerate with: python -m pip freeze --exclude-editable "
+    "| sort > requirements.txt   (venv python; then restore the header, and "
+    "colorama's pin if not on Windows)"
 )
 
 
@@ -116,10 +118,60 @@ def check_declared(pins: dict[str, str], declared: list[str] | None = None) -> l
     return errors
 
 
-def check_environment(pins: dict[str, str]) -> list[str]:
-    """Pins against what is importable here. Platform- and resolution-specific."""
+def required_here(declared: list[str] | None = None) -> dict[str, str]:
+    """The dependency closure on this interpreter, mapped to what requires each package.
+
+    Walks the installed metadata from pyproject's declarations, evaluating
+    environment markers here: `colorama` is in the closure on Windows only, and
+    `zopfli` only because `fonttools[woff]` asks for it. A package the walk
+    reaches but cannot find installed is still returned, so it is reported.
+    """
+    from importlib.metadata import requires
+
+    from packaging.requirements import Requirement
+
+    needed: dict[str, str] = {}
+    extras_seen: dict[str, set[str]] = {}
+    queue = [
+        (Requirement(raw), "pyproject.toml")
+        for raw in (declared_dependencies() if declared is None else declared)
+    ]
+    while queue:
+        requirement, parent = queue.pop()
+        name = canonical(requirement.name)
+        extras = {""} | set(requirement.extras)
+        seen = extras_seen.setdefault(name, set())
+        if name in needed and extras <= seen:
+            continue
+        needed.setdefault(name, parent)
+        seen |= extras
+        try:
+            children = requires(name) or []
+        except PackageNotFoundError:
+            continue
+        for raw in children:
+            child = Requirement(raw)
+            if child.marker is None or any(child.marker.evaluate({"extra": e}) for e in seen):
+                queue.append((child, name))
+    return needed
+
+
+def check_environment(pins: dict[str, str], needed: dict[str, str] | None = None) -> list[str]:
+    """Pins against what is installed here, for the packages this platform needs.
+
+    A pin outside this platform's closure (`colorama` off Windows) is not
+    expected to be installed; a package inside it must be both pinned and
+    installed at the pinned version.
+    """
+    if needed is None:
+        needed = required_here()
     drift = []
+    for name, parent in sorted(needed.items()):
+        if name not in pins:
+            drift.append(f"{name} is required by {parent} here but not pinned")
     for name, pinned in sorted(pins.items()):
+        if name not in needed:
+            continue
         try:
             actual = installed_version(name)
         except PackageNotFoundError:

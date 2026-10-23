@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -147,6 +148,30 @@ def test_pins_accept_a_pin_inside_the_declared_range() -> None:
     assert (
         check_requirements.check_declared({"fastapi": "0.141.1"}, declared=["fastapi>=0.115"]) == []
     )
+
+
+def test_pins_closure_follows_platform_markers_and_extras() -> None:
+    """colorama is a dependency of click on Windows only; zopfli only of fonttools[woff]."""
+    needed = check_requirements.required_here(["click", "fonttools[woff]"])
+    assert ("colorama" in needed) == (sys.platform == "win32")
+    assert needed["zopfli"] == "fonttools"
+    assert "zopfli" not in check_requirements.required_here(["fonttools"])
+
+
+def test_pins_a_pin_for_another_platform_need_not_be_installed() -> None:
+    assert check_requirements.check_environment({"colorama": "0.4.6"}, needed={}) == []
+
+
+def test_pins_catch_a_required_package_that_is_not_pinned() -> None:
+    drift = check_requirements.check_environment({}, needed={"zopfli": "fonttools"})
+    assert drift == ["zopfli is required by fonttools here but not pinned"]
+
+
+def test_pins_catch_a_required_pin_that_is_not_installed() -> None:
+    drift = check_requirements.check_environment(
+        {"dzweb-no-such-package": "1.0"}, needed={"dzweb-no-such-package": "pyproject.toml"}
+    )
+    assert drift == ["dzweb-no-such-package==1.0 is pinned but not installed"]
 
 
 def test_pins_in_the_current_repo_match_pyproject_and_the_environment() -> None:

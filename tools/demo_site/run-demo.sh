@@ -13,8 +13,10 @@ set -a
 . tools/demo_site/demo.env
 . ./.env
 set +a
+PY=.venv/bin/python
+[ -x "$PY" ] || PY=.venv/Scripts/python.exe  # Windows (Git Bash)
 case "${1:-}" in
-  api) exec .venv/Scripts/python.exe -m uvicorn orchestrator.main:create --factory --host 127.0.0.1 --port 8000 ;;
-  worker) exec .venv/Scripts/python.exe -m orchestrator.queue.run_worker ;;
+  api) exec "$PY" -m uvicorn orchestrator.main:create --factory --host 127.0.0.1 --port 8000 ;;
+  worker) exec "$PY" -m orchestrator.queue.run_worker ;;
   *) echo "usage: run-demo.sh api|worker" >&2; exit 2 ;;
 esac
