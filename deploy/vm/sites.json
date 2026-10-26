@@ -1,12 +1,13 @@
 {
-  "_comment": "Sites enrolled on the GovTech VM (FR-601). The G2C portal is the pilot. Tier 1 rules are PROVISIONAL until the product owner confirms which portal pages and elements carry fees, eligibility and legal text (FR-510); nothing here is reachable by citizens until GovTech's gateway publishes the API.",
+  "_comment": "Sites enrolled on the GovTech VM (FR-601). The G2C portal is the pilot. Tier 1 rules are PROVISIONAL until the product owner confirms which portal pages and elements carry fees, eligibility and legal text (FR-510); nothing here is reachable by citizens until GovTech's gateway publishes the API. http://172.30.85.22 is the demo copy of the life-events page this VM serves at /dzweb/ (nginx, which also proxies /dzweb/v1/ to the API).",
   "sites": [
     {
       "site_id": "g2c",
       "origins": [
         "https://citizenservices.gov.bt",
         "https://g2c.tech.gov.bt",
-        "https://www.citizenservices.gov.bt"
+        "https://www.citizenservices.gov.bt",
+        "http://172.30.85.22"
       ],
       "default_tier": 2,
       "tier1_selectors": [
