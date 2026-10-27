@@ -55,6 +55,32 @@ cd ~/dzweb && git pull && .venv/bin/pip install -r requirements.txt && .venv/bin
 sudo systemctl restart dzweb-api dzweb-worker      # migrations run at API start
 ```
 
+## Demo page
+
+http://172.30.85.22/dzweb/index.html is a copy of the G2C life-events page
+with the widget, for showing dzweb before the portal adds the script tag. The
+IP's own site (`/`) belongs to another team. Only ports 22, 80 and 443 reach the
+VM and SSH forwarding is off, so it goes through nginx (`deploy/vm/demo-nginx.sh`).
+
+Assemble `~/dzweb-demo` on a laptop (the VM cannot fetch the portal: its
+certificate does not verify there), then copy it over:
+
+```bash
+python tools/g2c_demo/scrape.py && (cd adapters/widget && npm run build)
+mkdir -p /tmp/dzweb-demo && cp -R tools/g2c_demo/data /tmp/dzweb-demo/data && cp -R adapters/widget/dist /tmp/dzweb-demo/widget
+sed -e 's|src="/widget/main.js" data-dz-site="portal" data-dz-api="http://127.0.0.1:8000"|src="/dzweb/widget/main.js" data-dz-site="g2c" data-dz-api="http://172.30.85.22/dzweb"|' \
+    tools/g2c_demo/index.html > /tmp/dzweb-demo/index.html
+rsync -a --delete /tmp/dzweb-demo/ tyeshi@172.30.85.22:dzweb-demo/
+```
+
+Then, on the VM: `sudo bash ~/dzweb/deploy/vm/demo-nginx.sh` (`... undo` removes it).
+
+- `http://172.30.85.22` is enrolled for `g2c` in `deploy/vm/sites.json`.
+- Behind nginx every visitor is one client, so nothing reaches three distinct
+  clients: pre-warm the page (`orchestrator.ops.prewarm`) before showing it.
+- A browser that opened `/dzweb/` before the setup may keep the other team's
+  app for it: use `/dzweb/index.html` or a private window.
+
 ## Not yet
 
 - **Citizens cannot reach it.** GovTech's gateway must publish `127.0.0.1:8000`

@@ -34,6 +34,9 @@ adapters/widget/playwright-report/
 
 .gstack/
 
+# Written by Chrome when the demo extension is loaded unpacked
+adapters/extension/_metadata/
+
 # Local snapshot of the G2C portal (officials' contact details; never commit)
 tools/g2c_demo/data/
 
